@@ -1,7 +1,7 @@
 {
   "name": "maplibre-gl-basemap-control",
   "version": "0.1.0",
-  "description": "A MapLibre GL JS control for searching and adding basemaps",
+  "description": "A MapLibre GL JS control for searching and switching public basemaps",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",

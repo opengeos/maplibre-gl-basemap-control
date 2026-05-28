@@ -197,6 +197,8 @@ export class BasemapControl implements IControl {
         this._map.setStyle(basemap.source.url);
       }
 
+      this._applyBasemapView(basemap);
+
       this._state = {
         ...this._state,
         activeBasemapId: basemap.id,
@@ -570,6 +572,17 @@ export class BasemapControl implements IControl {
     });
     this._managedLayerIds = [];
     this._managedSourceIds = [];
+  }
+
+  private _applyBasemapView(basemap: BasemapDefinition): void {
+    if (!this._map || !basemap.view) return;
+
+    this._map.jumpTo({
+      center: basemap.view.center,
+      zoom: basemap.view.zoom,
+      bearing: basemap.view.bearing,
+      pitch: basemap.view.pitch,
+    });
   }
 
   private _findBasemapInsertBeforeId(): string | undefined {

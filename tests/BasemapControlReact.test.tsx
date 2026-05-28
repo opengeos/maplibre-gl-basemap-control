@@ -64,6 +64,7 @@ function createReactMapMock() {
     getSource: vi.fn((id: string) => (sources.has(id) ? { id } : undefined)),
     getStyle: vi.fn(() => ({ version: 8, sources: {}, layers })),
     setStyle: vi.fn(),
+    jumpTo: vi.fn(),
   };
 
   return map;

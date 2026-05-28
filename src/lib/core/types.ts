@@ -34,6 +34,12 @@ export interface BasemapDefinition {
   description?: string;
   attribution?: string;
   source: RasterBasemapSource | StyleBasemapSource;
+  view?: {
+    center?: [number, number];
+    zoom?: number;
+    bearing?: number;
+    pitch?: number;
+  };
   tags?: string[];
 }
 
