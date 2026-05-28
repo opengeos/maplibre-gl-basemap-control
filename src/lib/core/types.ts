@@ -1,80 +1,96 @@
 import type { Map } from 'maplibre-gl';
 
-/**
- * Options for configuring the PluginControl
- */
-export interface PluginControlOptions {
-  /**
-   * Whether the control panel should start collapsed (showing only the toggle button)
-   * @default true
-   */
+export type BasemapSourceType = 'raster' | 'vector-style' | 'style';
+
+export type BasemapControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export interface BasemapProvider {
+  id: string;
+  name: string;
+  category?: string;
+  icon?: string;
+}
+
+export interface RasterBasemapSource {
+  type: 'raster';
+  tiles: string[];
+  tileSize?: number;
+  minzoom?: number;
+  maxzoom?: number;
+  scheme?: 'xyz' | 'tms';
+}
+
+export interface StyleBasemapSource {
+  type: 'style' | 'vector-style';
+  url: string;
+}
+
+export interface BasemapDefinition {
+  id: string;
+  name: string;
+  provider: string;
+  type: BasemapSourceType;
+  category?: string;
+  description?: string;
+  attribution?: string;
+  source: RasterBasemapSource | StyleBasemapSource;
+  tags?: string[];
+}
+
+export interface BasemapControlOptions {
   collapsed?: boolean;
-
-  /**
-   * Position of the control on the map
-   * @default 'top-right'
-   */
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-
-  /**
-   * Title displayed in the control header
-   * @default 'Plugin Control'
-   */
+  position?: BasemapControlPosition;
   title?: string;
-
-  /**
-   * Width of the control panel in pixels
-   * @default 300
-   */
   panelWidth?: number;
-
-  /**
-   * Custom CSS class name for the control container
-   */
   className?: string;
+  basemaps?: BasemapDefinition[];
+  providers?: BasemapProvider[];
+  includeDefaultBasemaps?: boolean;
+  defaultBasemapId?: string;
 }
 
-/**
- * Internal state of the plugin control
- */
-export interface PluginState {
-  /**
-   * Whether the control panel is currently collapsed
-   */
+export interface BasemapControlState {
   collapsed: boolean;
-
-  /**
-   * Current panel width in pixels
-   */
   panelWidth: number;
-
-  /**
-   * Any custom state data
-   */
-  data?: Record<string, unknown>;
+  activeBasemapId?: string;
+  query: string;
+  providerFilter: string;
+  categoryFilter: string;
+  loading: boolean;
+  error?: string;
 }
 
-/**
- * Props for the React wrapper component
- */
-export interface PluginControlReactProps extends PluginControlOptions {
-  /**
-   * MapLibre GL map instance
-   */
+export interface BasemapChangeEvent {
+  type: 'basemapchange';
+  state: BasemapControlState;
+  basemap: BasemapDefinition;
+}
+
+export interface BasemapErrorEvent {
+  type: 'error';
+  state: BasemapControlState;
+  error: Error;
+  basemap?: BasemapDefinition;
+}
+
+export interface BasemapStateEvent {
+  type: 'collapse' | 'expand' | 'statechange';
+  state: BasemapControlState;
+}
+
+export type BasemapControlEvent = BasemapStateEvent['type'] | 'basemapchange' | 'error';
+
+export type BasemapControlEventPayload =
+  | BasemapStateEvent
+  | BasemapChangeEvent
+  | BasemapErrorEvent;
+
+export type BasemapControlEventHandler = (event: BasemapControlEventPayload) => void;
+
+export interface BasemapControlReactProps extends BasemapControlOptions {
   map: Map;
-
-  /**
-   * Callback fired when the control state changes
-   */
-  onStateChange?: (state: PluginState) => void;
+  activeBasemapId?: string;
+  onStateChange?: (state: BasemapControlState) => void;
+  onBasemapChange?: (basemap: BasemapDefinition, state: BasemapControlState) => void;
+  onError?: (error: Error, state: BasemapControlState) => void;
 }
-
-/**
- * Event types emitted by the plugin control
- */
-export type PluginControlEvent = 'collapse' | 'expand' | 'statechange';
-
-/**
- * Event handler function type
- */
-export type PluginControlEventHandler = (event: { type: PluginControlEvent; state: PluginState }) => void;

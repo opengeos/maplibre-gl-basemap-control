@@ -1,7 +1,7 @@
 {
-  "name": "maplibre-gl-plugin-template",
-  "version": "0.2.2",
-  "description": "A template for creating MapLibre GL JS plugins with TypeScript and React support",
+  "name": "maplibre-gl-basemap-control",
+  "version": "0.1.0",
+  "description": "A MapLibre GL JS control for searching and adding basemaps",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -27,7 +27,7 @@
         "default": "./dist/react.cjs"
       }
     },
-    "./style.css": "./dist/maplibre-gl-plugin-template.css"
+    "./style.css": "./dist/maplibre-gl-basemap-control.css"
   },
   "files": [
     "dist",
@@ -53,16 +53,18 @@
     "maplibre",
     "maplibre-gl",
     "map",
+    "basemap",
+    "basemaps",
     "plugin",
     "control",
     "react",
     "typescript"
   ],
-  "author": "Your Name",
+  "author": "Qiusheng Wu",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/maplibre-gl-plugin-template.git"
+    "url": "https://github.com/opengeos/maplibre-gl-basemap-control.git"
   },
   "peerDependencies": {
     "maplibre-gl": ">=3.0.0",
