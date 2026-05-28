@@ -7,6 +7,7 @@ const DEFAULT_STATE: BasemapControlState = {
   query: '',
   providerFilter: '',
   categoryFilter: '',
+  beforeId: '',
   loading: false,
 };
 

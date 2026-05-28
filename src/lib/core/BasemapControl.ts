@@ -83,6 +83,7 @@ export class BasemapControl implements IControl {
       query: '',
       providerFilter: '',
       categoryFilter: '',
+      beforeId: '',
       loading: false,
     };
   }
@@ -338,18 +339,42 @@ export class BasemapControl implements IControl {
     if (!this._content) return;
 
     const categories = getBasemapCategories(this._basemaps);
-    const results = filterBasemaps(this._basemaps, {
-      query: this._state.query,
-      provider: this._state.providerFilter,
-      category: this._state.categoryFilter,
-    });
+    const results = this._getFilteredBasemaps();
 
     this._content.replaceChildren(
-      this._createSearchInput(),
+      this._createSearchRow(),
       this._createFilterRow(this._providers, categories),
       this._createStatus(results.length),
       this._createResults(results),
     );
+  }
+
+  private _renderFilteredResults(): void {
+    if (!this._content) return;
+
+    const results = this._getFilteredBasemaps();
+    this._content.querySelector('.basemap-control-status')?.replaceWith(
+      this._createStatus(results.length),
+    );
+    this._content.querySelector('.basemap-control-results')?.replaceWith(
+      this._createResults(results),
+    );
+  }
+
+  private _getFilteredBasemaps(): BasemapDefinition[] {
+    return filterBasemaps(this._basemaps, {
+      query: this._state.query,
+      provider: this._state.providerFilter,
+      category: this._state.categoryFilter,
+    });
+  }
+
+  private _createSearchRow(): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'basemap-control-search-row';
+    row.appendChild(this._createSearchInput());
+    row.appendChild(this._createBeforeIdInput());
+    return row;
   }
 
   private _createSearchInput(): HTMLElement {
@@ -364,7 +389,26 @@ export class BasemapControl implements IControl {
     input.setAttribute('aria-label', 'Search basemaps');
     input.addEventListener('input', () => {
       this._state = { ...this._state, query: input.value };
-      this._renderContent();
+      this._renderFilteredResults();
+      this._emit({ type: 'statechange', state: this.getState() });
+    });
+
+    wrapper.appendChild(input);
+    return wrapper;
+  }
+
+  private _createBeforeIdInput(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-before-id';
+
+    const input = document.createElement('input');
+    input.className = 'basemap-control-input';
+    input.type = 'text';
+    input.placeholder = 'before_id: none';
+    input.value = this._state.beforeId;
+    input.setAttribute('aria-label', 'before_id');
+    input.addEventListener('input', () => {
+      this._state = { ...this._state, beforeId: input.value };
       this._emit({ type: 'statechange', state: this.getState() });
     });
 
@@ -535,7 +579,7 @@ export class BasemapControl implements IControl {
     };
 
     this._map.addSource(sourceId, source);
-    this._map.addLayer(layer, this._findBasemapInsertBeforeId());
+    this._map.addLayer(layer, this._getBasemapInsertBeforeId());
     this._managedSourceIds = [sourceId];
     this._managedLayerIds = [layerId];
   }
@@ -585,12 +629,10 @@ export class BasemapControl implements IControl {
     });
   }
 
-  private _findBasemapInsertBeforeId(): string | undefined {
-    const layers = this._map?.getStyle().layers ?? [];
-    const firstOverlay = layers.find(
-      (layer) => layer.type !== 'background' && !layer.id.startsWith(CONTROL_LAYER_PREFIX),
-    );
-    return firstOverlay?.id;
+  private _getBasemapInsertBeforeId(): string | undefined {
+    const beforeId = this._state.beforeId.trim();
+    if (!beforeId || beforeId.toLowerCase() === 'none') return undefined;
+    return beforeId;
   }
 
   private _setupEventListeners(): void {

@@ -114,7 +114,14 @@
   padding-top: 8px;
 }
 
-.basemap-control-search {
+.basemap-control-search-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.basemap-control-search,
+.basemap-control-before-id {
   position: relative;
 }
 
@@ -122,6 +129,7 @@
 .basemap-control-select {
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   background: #fff;
