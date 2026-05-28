@@ -26,6 +26,13 @@
   background-color: rgba(0, 0, 0, 0.05);
 }
 
+.basemap-control-toggle:focus-visible,
+.basemap-control-close:focus-visible,
+.basemap-control-result:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .basemap-control-icon {
   display: flex;
   align-items: center;

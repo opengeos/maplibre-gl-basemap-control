@@ -8,6 +8,7 @@ export {
   createBasemapCatalog,
   filterBasemaps,
   getBasemapCategories,
+  resolveBasemapProviders,
 } from './lib/core/catalog';
 
 export type {

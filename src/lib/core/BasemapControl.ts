@@ -5,11 +5,10 @@ import type {
   SourceSpecification,
 } from 'maplibre-gl';
 import {
-  combineProviders,
   createBasemapCatalog,
-  DEFAULT_BASEMAP_PROVIDERS,
   filterBasemaps,
   getBasemapCategories,
+  resolveBasemapProviders,
 } from './catalog';
 import type {
   BasemapControlEvent,
@@ -72,7 +71,11 @@ export class BasemapControl implements IControl {
       options?.basemaps,
       this._options.includeDefaultBasemaps,
     );
-    this._providers = combineProviders(DEFAULT_BASEMAP_PROVIDERS, options?.providers);
+    this._providers = resolveBasemapProviders(
+      this._basemaps,
+      options?.providers,
+      this._options.includeDefaultBasemaps,
+    );
     this._state = {
       collapsed: this._options.collapsed,
       panelWidth: this._options.panelWidth,
@@ -100,7 +103,7 @@ export class BasemapControl implements IControl {
     this._renderContent();
 
     if (this._state.activeBasemapId) {
-      void this.setBasemap(this._state.activeBasemapId);
+      this._selectBasemap(this._state.activeBasemapId);
     }
 
     return this._container;
@@ -148,6 +151,11 @@ export class BasemapControl implements IControl {
 
   setBasemaps(basemaps: BasemapDefinition[]): void {
     this._basemaps = [...basemaps];
+    this._providers = resolveBasemapProviders(
+      this._basemaps,
+      this._options.providers,
+      this._options.includeDefaultBasemaps,
+    );
     if (
       this._state.activeBasemapId &&
       !this._basemaps.some((basemap) => basemap.id === this._state.activeBasemapId)
@@ -205,6 +213,13 @@ export class BasemapControl implements IControl {
       this._handleError(error, basemap);
       throw error;
     }
+  }
+
+  // setBasemap rethrows after emitting the error event so callers that await
+  // it can react. Internal fire-and-forget callers use this instead to avoid
+  // unhandled promise rejections; the failure is still reported via `error`.
+  private _selectBasemap(id: string): void {
+    this.setBasemap(id).catch(() => {});
   }
 
   toggle(): void {
@@ -449,7 +464,7 @@ export class BasemapControl implements IControl {
       }
       row.disabled = this._state.loading;
       row.addEventListener('click', () => {
-        void this.setBasemap(basemap.id);
+        this._selectBasemap(basemap.id);
       });
 
       const main = document.createElement('span');

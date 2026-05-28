@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { BasemapControl } from './BasemapControl';
+import { createBasemapCatalog } from './catalog';
 import type { BasemapControlReactProps } from './types';
 
 export function BasemapControlReact({
@@ -15,6 +16,7 @@ export function BasemapControlReact({
     () => options.basemaps?.map((basemap) => basemap.id).join('|') ?? '',
     [options.basemaps],
   );
+  const didInitCatalog = useRef(false);
 
   useEffect(() => {
     const control = new BasemapControl({
@@ -49,7 +51,20 @@ export function BasemapControlReact({
       }
       controlRef.current = null;
     };
-  }, [map, basemapKey]);
+  }, [map]);
+
+  useEffect(() => {
+    const control = controlRef.current;
+    if (!control) return;
+    // Skip the first run: the control was just built with this catalog.
+    // Updating in place (instead of recreating the control) avoids tearing
+    // down and re-adding the managed basemap layer on catalog changes.
+    if (!didInitCatalog.current) {
+      didInitCatalog.current = true;
+      return;
+    }
+    control.setBasemaps(createBasemapCatalog(options.basemaps, options.includeDefaultBasemaps));
+  }, [basemapKey]);
 
   useEffect(() => {
     const control = controlRef.current;
@@ -70,7 +85,9 @@ export function BasemapControlReact({
     if (!control || !activeBasemapId) return;
     if (control.getState().activeBasemapId === activeBasemapId) return;
 
-    void control.setBasemap(activeBasemapId);
+    // Failures are surfaced through the control's error event (onError);
+    // swallow the rejection so it does not become an unhandled rejection.
+    control.setBasemap(activeBasemapId).catch(() => {});
   }, [activeBasemapId]);
 
   return null;

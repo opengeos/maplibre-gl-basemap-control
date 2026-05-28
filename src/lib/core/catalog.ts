@@ -172,6 +172,26 @@ export function combineProviders(
   return [...byId.values()];
 }
 
+export function resolveBasemapProviders(
+  basemaps: BasemapDefinition[],
+  customProviders: BasemapProvider[] = [],
+  includeDefaultProviders = true,
+): BasemapProvider[] {
+  const byId = new Map<string, BasemapProvider>();
+  if (includeDefaultProviders) {
+    DEFAULT_BASEMAP_PROVIDERS.forEach((provider) => byId.set(provider.id, provider));
+  }
+  customProviders.forEach((provider) => byId.set(provider.id, provider));
+  // Derive any provider referenced by the catalog but not yet listed so the
+  // filter never omits a custom provider or shows defaults with no results.
+  basemaps.forEach((basemap) => {
+    if (basemap.provider && !byId.has(basemap.provider)) {
+      byId.set(basemap.provider, { id: basemap.provider, name: basemap.provider });
+    }
+  });
+  return [...byId.values()];
+}
+
 export function createBasemapCatalog(
   customBasemaps: BasemapDefinition[] = [],
   includeDefaultBasemaps = true,
