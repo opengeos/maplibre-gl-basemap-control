@@ -62,6 +62,7 @@ export interface BasemapControlState {
   query: string;
   providerFilter: string;
   categoryFilter: string;
+  beforeId: string;
   loading: boolean;
   error?: string;
 }

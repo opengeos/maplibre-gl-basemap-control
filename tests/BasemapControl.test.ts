@@ -90,6 +90,10 @@ describe('BasemapControl', () => {
 
     controlCorner.appendChild(control.onAdd(map as never));
     expect(screen.getByLabelText('Basemaps')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>('before_id').value).toBe('');
+    expect(screen.getByLabelText('Search basemaps').closest('.basemap-control-search-row')).toBe(
+      screen.getByLabelText('before_id').closest('.basemap-control-search-row'),
+    );
     expect(screen.getByText('One Streets')).toBeTruthy();
     expect(document.querySelector('.basemap-control-panel')?.classList.contains('expanded')).toBe(
       false,
@@ -110,10 +114,13 @@ describe('BasemapControl', () => {
     });
 
     controlCorner.appendChild(control.onAdd(map as never));
-    fireEvent.input(screen.getByLabelText('Search basemaps'), { target: { value: 'imagery' } });
+    const searchInput = screen.getByLabelText<HTMLInputElement>('Search basemaps');
+    searchInput.focus();
+    fireEvent.input(searchInput, { target: { value: 'imagery' } });
 
     expect(screen.queryByText('One Streets')).toBeNull();
     expect(screen.getByText('Two Imagery')).toBeTruthy();
+    expect(document.activeElement).toBe(searchInput);
   });
 
   it('filters results from the provider select', () => {
@@ -174,6 +181,24 @@ describe('BasemapControl', () => {
     expect(map.removeSource).toHaveBeenCalledWith('maplibre-basemap-control-source-one');
     expect(map.addLayer).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'maplibre-basemap-control-layer-two' }),
+      undefined,
+    );
+  });
+
+  it('uses the before_id input when adding raster basemaps', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    fireEvent.input(screen.getByLabelText('before_id'), { target: { value: 'overlay' } });
+    await control.setBasemap('one');
+
+    expect(map.addLayer).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'maplibre-basemap-control-layer-one' }),
       'overlay',
     );
   });

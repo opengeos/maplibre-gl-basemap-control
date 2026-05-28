@@ -158,6 +158,10 @@ Set `includeDefaultBasemaps: false` to use only your supplied catalog.
 - `on(event, handler)`, `off(event, handler)` - Subscribe to events
 - `getMap()`, `getContainer()` - Access MapLibre/control internals
 
+The panel includes a `before_id` input for raster basemap insertion. Leave it empty or set it to
+`none` to add the basemap above existing layers, or enter a MapLibre layer id to insert the basemap
+before that layer.
+
 ### Events
 
 - `basemapchange`
