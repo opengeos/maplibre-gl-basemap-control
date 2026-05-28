@@ -1,0 +1,265 @@
+/* MapLibre GL Basemap Control */
+
+.basemap-control {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  color: #1f2933;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.basemap-control-toggle {
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1f2933;
+  cursor: pointer;
+  outline: none;
+}
+
+.basemap-control-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.basemap-control-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+
+.basemap-control-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+}
+
+.basemap-control-panel {
+  position: absolute;
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 24px));
+  display: none;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.12);
+  z-index: 1000;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.basemap-control-panel.expanded {
+  display: flex;
+  flex-direction: column;
+}
+
+.basemap-control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.basemap-control-title {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 650;
+  color: #111827;
+}
+
+.basemap-control-close {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.basemap-control-close:hover {
+  color: #111827;
+}
+
+.basemap-control-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding-top: 8px;
+}
+
+.basemap-control-search {
+  position: relative;
+}
+
+.basemap-control-input,
+.basemap-control-select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  outline: none;
+}
+
+.basemap-control-input {
+  height: 34px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.basemap-control-select {
+  height: 30px;
+  padding: 4px 6px;
+}
+
+.basemap-control-input:focus,
+.basemap-control-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.basemap-control-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.basemap-control-status {
+  min-height: 17px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.basemap-control-status.is-error {
+  color: #b91c1c;
+}
+
+.basemap-control-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.basemap-control-result {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.basemap-control-result:hover {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+.basemap-control-result.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.basemap-control-result:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.basemap-control-result-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.basemap-control-result-name {
+  overflow: hidden;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basemap-control-result-meta,
+.basemap-control-result-attribution {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basemap-control-result-type {
+  align-self: start;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.basemap-control-result-attribution {
+  grid-column: 1 / -1;
+}
+
+.basemap-control-empty {
+  padding: 18px 8px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.basemap-control-results::-webkit-scrollbar {
+  width: 6px;
+}
+
+.basemap-control-results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.basemap-control-results::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #d1d5db;
+}
+
+@media (max-width: 420px) {
+  .basemap-control-panel {
+    width: calc(100vw - 24px) !important;
+  }
+
+  .basemap-control-filters {
+    grid-template-columns: 1fr;
+  }
+}

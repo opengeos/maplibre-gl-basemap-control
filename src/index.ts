@@ -1,18 +1,31 @@
-// Import styles
-import './lib/styles/plugin-control.css';
+import './lib/styles/basemap-control.css';
 
-// Main entry point - Core exports
-export { PluginControl } from './lib/core/PluginControl';
+export { BasemapControl } from './lib/core/BasemapControl';
+export {
+  DEFAULT_BASEMAPS,
+  DEFAULT_BASEMAP_PROVIDERS,
+  combineProviders,
+  createBasemapCatalog,
+  filterBasemaps,
+  getBasemapCategories,
+} from './lib/core/catalog';
 
-// Type exports
 export type {
-  PluginControlOptions,
-  PluginState,
-  PluginControlEvent,
-  PluginControlEventHandler,
+  BasemapChangeEvent,
+  BasemapControlEvent,
+  BasemapControlEventHandler,
+  BasemapControlEventPayload,
+  BasemapControlOptions,
+  BasemapControlPosition,
+  BasemapControlState,
+  BasemapDefinition,
+  BasemapErrorEvent,
+  BasemapProvider,
+  BasemapSourceType,
+  RasterBasemapSource,
+  StyleBasemapSource,
 } from './lib/core/types';
 
-// Utility exports
 export {
   clamp,
   formatNumericValue,

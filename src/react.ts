@@ -1,14 +1,16 @@
-// React entry point
-export { PluginControlReact } from './lib/core/PluginControlReact';
+export { BasemapControlReact } from './lib/core/BasemapControlReact';
+export { useBasemapState } from './lib/hooks';
 
-// React hooks
-export { usePluginState } from './lib/hooks';
-
-// Re-export types for React consumers
 export type {
-  PluginControlOptions,
-  PluginState,
-  PluginControlReactProps,
-  PluginControlEvent,
-  PluginControlEventHandler,
+  BasemapChangeEvent,
+  BasemapControlEvent,
+  BasemapControlEventHandler,
+  BasemapControlEventPayload,
+  BasemapControlOptions,
+  BasemapControlReactProps,
+  BasemapControlState,
+  BasemapDefinition,
+  BasemapErrorEvent,
+  BasemapProvider,
+  BasemapSourceType,
 } from './lib/core/types';
