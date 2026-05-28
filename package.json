@@ -34,6 +34,10 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "sideEffects": [
     "*.css"
   ],
@@ -64,7 +68,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/opengeos/maplibre-gl-basemap-control.git"
+    "url": "git+https://github.com/opengeos/maplibre-gl-basemap-control.git"
   },
   "peerDependencies": {
     "maplibre-gl": ">=3.0.0",
