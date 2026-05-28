@@ -54,10 +54,34 @@ describe('basemap catalog', () => {
     expect(filterBasemaps(catalog, { query: 'imagery' }).map((item) => item.id)).toContain(
       'esri-world-imagery',
     );
-    expect(filterBasemaps(catalog, { provider: 'carto' })).toHaveLength(3);
+    expect(filterBasemaps(catalog, { provider: 'carto' }).length).toBeGreaterThan(3);
     expect(filterBasemaps(catalog, { category: 'Terrain' }).map((item) => item.id)).toContain(
       'opentopomap',
     );
+  });
+
+  it('includes additional XYZ basemaps from the qgis-basemaps catalog', () => {
+    const catalog = createBasemapCatalog();
+    const ids = catalog.map((basemap) => basemap.id);
+
+    expect(ids).toContain('google-satellite');
+    expect(ids).toContain('swisstopo-swissimage');
+    expect(ids).toContain('nasa-gibs-blue-marble');
+    expect(ids).toContain('usgs-us-topo');
+    expect(ids).toContain('nlmaps-luchtfoto');
+  });
+
+  it('includes OpenFreeMap vector styles', () => {
+    const catalog = createBasemapCatalog();
+    const ids = catalog.map((basemap) => basemap.id);
+
+    expect(ids).toContain('openfreemap-positron');
+    expect(ids).toContain('openfreemap-bright');
+    expect(ids).toContain('openfreemap-liberty');
+    expect(ids).toContain('openfreemap-dark');
+    expect(ids).toContain('openfreemap-fiord');
+    expect(ids).toContain('openfreemap-3d');
+    expect(catalog.find((basemap) => basemap.id === 'openfreemap-3d')?.view?.pitch).toBe(60);
   });
 
   it('deduplicates providers by id', () => {

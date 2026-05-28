@@ -69,6 +69,7 @@ function createMockMap() {
     getSource: vi.fn((id: string) => (sources.has(id) ? { id } : undefined)),
     getStyle: vi.fn(() => ({ version: 8, sources: {}, layers })),
     setStyle: vi.fn(),
+    jumpTo: vi.fn(),
   };
 
   return { map, controlCorner };
@@ -199,5 +200,40 @@ describe('BasemapControl', () => {
     await control.setBasemap('style');
 
     expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
+  });
+
+  it('applies optional basemap camera settings', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      basemaps: [
+        {
+          id: 'style-3d',
+          name: 'Style 3D',
+          provider: 'test',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://example.com/style.json',
+          },
+          view: {
+            center: [-0.114, 51.506],
+            zoom: 14.2,
+            bearing: 55.2,
+            pitch: 60,
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('style-3d');
+
+    expect(map.jumpTo).toHaveBeenCalledWith({
+      center: [-0.114, 51.506],
+      zoom: 14.2,
+      bearing: 55.2,
+      pitch: 60,
+    });
   });
 });
