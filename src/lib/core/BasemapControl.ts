@@ -409,7 +409,6 @@ export class BasemapControl implements IControl {
     const select = document.createElement('select');
     select.className = 'basemap-control-select';
     select.setAttribute('aria-label', label);
-    select.value = value;
 
     const all = document.createElement('option');
     all.value = '';
@@ -423,6 +422,7 @@ export class BasemapControl implements IControl {
       select.appendChild(element);
     });
 
+    select.value = value;
     select.addEventListener('change', () => onChange(select.value));
     return select;
   }

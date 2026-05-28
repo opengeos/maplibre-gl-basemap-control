@@ -115,6 +115,44 @@ describe('BasemapControl', () => {
     expect(screen.getByText('Two Imagery')).toBeTruthy();
   });
 
+  it('filters results from the provider select', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      providers: [
+        { id: 'one-provider', name: 'One Provider' },
+        { id: 'two-provider', name: 'Two Provider' },
+      ],
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+    control.setBasemaps([
+      { ...basemaps[0], provider: 'one-provider' },
+      { ...basemaps[1], provider: 'two-provider' },
+    ]);
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'two-provider' } });
+
+    expect(screen.queryByText('One Streets')).toBeNull();
+    expect(screen.getByText('Two Imagery')).toBeTruthy();
+  });
+
+  it('filters built-in basemaps from the provider select', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'esri' } });
+
+    expect(screen.getByLabelText<HTMLSelectElement>('Provider').value).toBe('esri');
+    expect(screen.getByText('World Imagery')).toBeTruthy();
+    expect(screen.getByText('World Topographic')).toBeTruthy();
+    expect(screen.queryByText('OpenStreetMap Standard')).toBeNull();
+  });
+
   it('selects a basemap, emits an event, and replaces the previous basemap', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({
