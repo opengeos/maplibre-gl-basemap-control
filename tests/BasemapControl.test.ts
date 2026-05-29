@@ -177,12 +177,30 @@ describe('BasemapControl', () => {
 
     expect(handler).toHaveBeenCalledTimes(2);
     expect(control.getActiveBasemap()?.id).toBe('two');
-    expect(map.removeLayer).toHaveBeenCalledWith('maplibre-basemap-control-layer-one');
+    expect(map.removeLayer).toHaveBeenCalledWith('one');
     expect(map.removeSource).toHaveBeenCalledWith('maplibre-basemap-control-source-one');
     expect(map.addLayer).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: 'maplibre-basemap-control-layer-two' }),
+      expect.objectContaining({ id: 'two' }),
       undefined,
     );
+  });
+
+  it('leaves the selected basemap on the map when removed', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('one');
+    control.onRemove();
+
+    expect(map.removeLayer).not.toHaveBeenCalled();
+    expect(map.removeSource).not.toHaveBeenCalled();
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(map.getSource('maplibre-basemap-control-source-one')).toBeTruthy();
   });
 
   it('uses the before_id input when adding raster basemaps', async () => {
@@ -198,7 +216,7 @@ describe('BasemapControl', () => {
     await control.setBasemap('one');
 
     expect(map.addLayer).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: 'maplibre-basemap-control-layer-one' }),
+      expect.objectContaining({ id: 'one' }),
       'overlay',
     );
   });
