@@ -35,7 +35,7 @@ const DEFAULT_OPTIONS: Required<
 };
 
 const CONTROL_SOURCE_PREFIX = 'maplibre-basemap-control-source';
-const CONTROL_LAYER_PREFIX = 'maplibre-basemap-control-layer';
+const CONTROL_LAYER_PREFIX = '';
 
 type EventHandlersMap = globalThis.Map<BasemapControlEvent, Set<BasemapControlEventHandler>>;
 
@@ -124,7 +124,6 @@ export class BasemapControl implements IControl {
       this._clickOutsideHandler = null;
     }
 
-    this._removeManagedBasemap();
     this._panel?.parentNode?.removeChild(this._panel);
     this._container?.parentNode?.removeChild(this._container);
 
@@ -562,7 +561,7 @@ export class BasemapControl implements IControl {
     if (!this._map || basemap.source.type !== 'raster') return;
 
     const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
-    const layerId = `${CONTROL_LAYER_PREFIX}-${basemap.id}`;
+    const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
     const source: SourceSpecification = {
       type: 'raster',
       tiles: basemap.source.tiles,
