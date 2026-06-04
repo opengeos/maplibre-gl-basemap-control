@@ -122,8 +122,32 @@
 }
 
 .basemap-control-search,
-.basemap-control-before-id {
+.basemap-control-before-id,
+.basemap-control-maptiler-key,
+.basemap-control-amazon-key,
+.basemap-control-aws-region {
   position: relative;
+}
+
+.basemap-control-provider-settings {
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #f9fafb;
+}
+
+.basemap-control-provider-settings-summary {
+  padding: 7px 9px;
+  color: #374151;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.basemap-control-provider-settings-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 0 8px 8px;
 }
 
 .basemap-control-input,
