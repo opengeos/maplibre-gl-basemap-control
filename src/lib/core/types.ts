@@ -52,6 +52,7 @@ export interface BasemapControlOptions {
   mapTilerApiKey?: string;
   amazonApiKey?: string;
   awsRegion?: string;
+  mapboxAccessToken?: string;
   basemaps?: BasemapDefinition[];
   providers?: BasemapProvider[];
   includeDefaultBasemaps?: boolean;

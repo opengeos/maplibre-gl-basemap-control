@@ -8,7 +8,7 @@ A MapLibre GL JS control for searching and switching public basemaps. It keeps t
 ## Features
 
 - Search-first basemap picker inspired by QuickMapServices
-- Built-in catalog for common public basemaps, MapTiler styles, and Amazon Location styles
+- Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, and Mapbox styles
 - Custom basemap and provider definitions
 - MapLibre `IControl` implementation
 - React wrapper and state hook
@@ -136,9 +136,12 @@ Set `includeDefaultBasemaps: false` to use only your supplied catalog.
 The built-in catalog includes MapTiler styles such as Streets, Base, Dataviz, Outdoor, Topo,
 Satellite Hybrid, Satellite Plain, Aquarelle, Backdrop, Landscape, Ocean, Toner, OpenStreetMap, and
 Winter. It also includes Amazon Location styles: Standard, Monochrome, Hybrid, and Satellite.
+Mapbox styles include Streets, Outdoors, Light, Dark, Satellite, Satellite Streets, Navigation Day,
+and Navigation Night.
 
-MapTiler and Amazon Location styles require API keys. Users can enter keys in the collapsible
-provider settings section in the control panel, or you can provide them when creating the control.
+MapTiler and Amazon Location styles require API keys. Mapbox styles require an access token. Users
+can enter keys and tokens in the collapsible provider settings section in the control panel, or you
+can provide them when creating the control.
 
 ```typescript
 const control = new BasemapControl({
@@ -146,6 +149,7 @@ const control = new BasemapControl({
   mapTilerApiKey: 'YOUR_MAPTILER_API_KEY',
   amazonApiKey: 'YOUR_AMAZON_LOCATION_API_KEY',
   awsRegion: 'us-east-1',
+  mapboxAccessToken: 'YOUR_MAPBOX_ACCESS_TOKEN',
 });
 ```
 
@@ -159,6 +163,12 @@ Amazon Location style URLs follow this form:
 
 ```text
 https://maps.geo.{aws-region}.amazonaws.com/v2/styles/{mapStyle}/descriptor?key={api-key}
+```
+
+Mapbox style URLs follow this form:
+
+```text
+https://api.mapbox.com/styles/v1/mapbox/{styleId}?access_token={api-key}
 ```
 
 ## API
@@ -175,6 +185,7 @@ https://maps.geo.{aws-region}.amazonaws.com/v2/styles/{mapStyle}/descriptor?key=
 | `mapTilerApiKey` | `string` | `undefined` | Initial MapTiler API key for built-in MapTiler styles |
 | `amazonApiKey` | `string` | `undefined` | Initial Amazon Location API key for built-in Amazon styles |
 | `awsRegion` | `string` | `'us-east-1'` | AWS region for built-in Amazon Location styles |
+| `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles |
 | `basemaps` | `BasemapDefinition[]` | `[]` | Custom basemaps to add or use |
 | `providers` | `BasemapProvider[]` | `[]` | Custom provider labels |
 | `includeDefaultBasemaps` | `boolean` | `true` | Include the built-in public catalog |
@@ -185,6 +196,7 @@ https://maps.geo.{aws-region}.amazonaws.com/v2/styles/{mapStyle}/descriptor?key=
 - `setBasemap(id)` - Apply a basemap and remove the previous plugin-managed basemap
 - `setMapTilerApiKey(apiKey)` - Set or update the MapTiler API key used by MapTiler styles
 - `setAmazonCredentials(apiKey, awsRegion)` - Set or update Amazon Location credentials
+- `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
 - `getActiveBasemap()` - Return the current basemap definition
 - `getBasemaps()` - Return the catalog
 - `setBasemaps(basemaps)` - Replace the catalog

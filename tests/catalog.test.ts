@@ -132,6 +132,25 @@ describe('basemap catalog', () => {
     );
   });
 
+  it('includes Mapbox styles with access token placeholders', () => {
+    const catalog = createBasemapCatalog();
+    const ids = catalog.map((basemap) => basemap.id);
+    const streets = catalog.find((basemap) => basemap.id === 'mapbox-streets');
+
+    expect(ids).toContain('mapbox-streets');
+    expect(ids).toContain('mapbox-outdoors');
+    expect(ids).toContain('mapbox-light');
+    expect(ids).toContain('mapbox-dark');
+    expect(ids).toContain('mapbox-satellite');
+    expect(ids).toContain('mapbox-satellite-streets');
+    expect(ids).toContain('mapbox-navigation-day');
+    expect(ids).toContain('mapbox-navigation-night');
+    expect(streets?.source.type).toBe('style');
+    expect(streets?.source.type === 'style' ? streets.source.url : '').toBe(
+      'https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token={api-key}',
+    );
+  });
+
   it('deduplicates providers by id', () => {
     const providers = combineProviders(DEFAULT_BASEMAP_PROVIDERS, [
       { id: 'carto', name: 'Carto Custom' },

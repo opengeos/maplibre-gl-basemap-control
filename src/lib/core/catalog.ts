@@ -6,6 +6,7 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: 'cyclosm', name: 'CyclOSM', category: 'Cycling' },
   { id: 'esri', name: 'ESRI', category: 'Imagery' },
   { id: 'google', name: 'Google', category: 'General' },
+  { id: 'mapbox', name: 'Mapbox', category: 'General' },
   { id: 'maptiler', name: 'MapTiler', category: 'General' },
   { id: 'nasa-gibs', name: 'NASA GIBS', category: 'Imagery' },
   { id: 'nlmaps', name: 'nlmaps', category: 'Regional' },
@@ -137,6 +138,33 @@ function amazonStyleBasemap({
   });
 }
 
+function mapboxStyleBasemap({
+  id,
+  name,
+  styleId,
+  category,
+  description,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  styleId: string;
+  category: string;
+  description: string;
+  tags?: string[];
+}): BasemapDefinition {
+  return styleBasemap({
+    id,
+    name,
+    provider: 'mapbox',
+    category,
+    description,
+    attribution: MAPBOX_ATTRIBUTION,
+    url: `https://api.mapbox.com/styles/v1/mapbox/${styleId}?access_token={api-key}`,
+    tags: ['mapbox', 'vector', 'style', ...tags],
+  });
+}
+
 function sortProviders(providers: BasemapProvider[]): BasemapProvider[] {
   return [...providers].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -144,6 +172,7 @@ function sortProviders(providers: BasemapProvider[]): BasemapProvider[] {
 const AMAZON_ATTRIBUTION = '&copy; Amazon Location Service';
 const CARTO_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const ESRI_ATTRIBUTION = 'Tiles &copy; Esri and the GIS User Community';
+const MAPBOX_ATTRIBUTION = '&copy; Mapbox &copy; OpenStreetMap contributors';
 const MAPTILER_ATTRIBUTION = '&copy; MapTiler &copy; OpenStreetMap contributors';
 const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const OPENFREEMAP_ATTRIBUTION = 'OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap';
@@ -268,6 +297,70 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     category: 'Imagery',
     description: 'Amazon Location satellite imagery map style.',
     tags: ['satellite', 'imagery'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-streets',
+    name: 'Mapbox Streets',
+    styleId: 'streets-v12',
+    category: 'Street',
+    description: 'Mapbox general-purpose street map style.',
+    tags: ['streets', 'street'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-outdoors',
+    name: 'Mapbox Outdoors',
+    styleId: 'outdoors-v12',
+    category: 'Outdoor',
+    description: 'Mapbox outdoor recreation and terrain style.',
+    tags: ['outdoors', 'terrain', 'recreation'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-light',
+    name: 'Mapbox Light',
+    styleId: 'light-v11',
+    category: 'Light',
+    description: 'Light Mapbox style for data overlays.',
+    tags: ['light', 'dataviz'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-dark',
+    name: 'Mapbox Dark',
+    styleId: 'dark-v11',
+    category: 'Dark',
+    description: 'Dark Mapbox style for high-contrast overlays.',
+    tags: ['dark'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-satellite',
+    name: 'Mapbox Satellite',
+    styleId: 'satellite-v9',
+    category: 'Imagery',
+    description: 'Mapbox satellite imagery style.',
+    tags: ['satellite', 'imagery'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-satellite-streets',
+    name: 'Mapbox Satellite Streets',
+    styleId: 'satellite-streets-v12',
+    category: 'Imagery',
+    description: 'Mapbox satellite imagery with streets and labels.',
+    tags: ['satellite', 'streets', 'imagery', 'labels'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-navigation-day',
+    name: 'Mapbox Navigation Day',
+    styleId: 'navigation-day-v1',
+    category: 'Navigation',
+    description: 'Mapbox daytime navigation style.',
+    tags: ['navigation', 'day'],
+  }),
+  mapboxStyleBasemap({
+    id: 'mapbox-navigation-night',
+    name: 'Mapbox Navigation Night',
+    styleId: 'navigation-night-v1',
+    category: 'Navigation',
+    description: 'Mapbox nighttime navigation style.',
+    tags: ['navigation', 'night', 'dark'],
   }),
   mapTilerStyleBasemap({
     id: 'maptiler-aquarelle',
