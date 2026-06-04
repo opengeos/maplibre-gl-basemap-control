@@ -124,6 +124,7 @@
 .basemap-control-search,
 .basemap-control-before-id,
 .basemap-control-maptiler-key,
+.basemap-control-mapbox-token,
 .basemap-control-amazon-key,
 .basemap-control-aws-region {
   position: relative;

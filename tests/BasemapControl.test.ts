@@ -304,6 +304,16 @@ describe('BasemapControl', () => {
             url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
           },
         },
+        {
+          id: 'mapbox-style',
+          name: 'Mapbox Style',
+          provider: 'mapbox',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token={api-key}',
+          },
+        },
       ],
     });
 
@@ -311,6 +321,10 @@ describe('BasemapControl', () => {
 
     expect(screen.getByText('Provider settings')).toBeTruthy();
     expect(screen.getByLabelText<HTMLInputElement>('MapTiler API key').value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>('Mapbox access token').value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>('Mapbox access token').autocomplete).toBe(
+      'new-password',
+    );
     expect(screen.getByLabelText<HTMLInputElement>('Amazon API key').value).toBe('');
     expect(screen.getByLabelText<HTMLInputElement>('AWS region').value).toBe('us-east-1');
   });
@@ -435,6 +449,112 @@ describe('BasemapControl', () => {
 
     await expect(control.setBasemap('amazon-standard')).rejects.toThrow(
       'Enter an Amazon API key before applying this basemap.',
+    );
+    expect(map.setStyle).not.toHaveBeenCalled();
+  });
+
+  it('applies Mapbox styles with the configured access token', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      mapboxAccessToken: 'mapbox token',
+      basemaps: [
+        {
+          id: 'mapbox-streets',
+          name: 'Mapbox Streets',
+          provider: 'mapbox',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('mapbox-streets');
+
+    expect(map.setStyle).toHaveBeenCalledWith(
+      'https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token=mapbox%20token',
+      expect.objectContaining({ validate: false, transformStyle: expect.any(Function) }),
+    );
+
+    const styleOptions = map.setStyle.mock.calls[0][1];
+    const transformedStyle = styleOptions.transformStyle(undefined, {
+      version: 8,
+      glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
+      sprite: 'mapbox://sprites/mapbox/streets-v12',
+      sources: {
+        composite: {
+          type: 'vector',
+          url: 'mapbox://mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2',
+        },
+      },
+      layers: [],
+    });
+
+    expect(transformedStyle.glyphs).toBe(
+      'https://api.mapbox.com/fonts/v1/mapbox/{fontstack}/{range}.pbf?access_token=mapbox%20token',
+    );
+    expect(transformedStyle.sprite).toBe(
+      'https://api.mapbox.com/styles/v1/mapbox/streets-v12/sprite?access_token=mapbox%20token',
+    );
+    expect(transformedStyle.sources.composite.url).toBe(
+      'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2.json?secure&access_token=mapbox%20token',
+    );
+    expect(transformedStyle.projection).toEqual({ type: 'mercator' });
+  });
+
+  it('requires a Mapbox access token before applying Mapbox styles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      basemaps: [
+        {
+          id: 'mapbox-streets',
+          name: 'Mapbox Streets',
+          provider: 'mapbox',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('mapbox-streets')).rejects.toThrow(
+      'Enter a Mapbox access token before applying this basemap.',
+    );
+    expect(map.setStyle).not.toHaveBeenCalled();
+  });
+
+  it('rejects URL-like Mapbox access tokens before applying Mapbox styles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      mapboxAccessToken: 'http://localhost:5174/examples/basic/index.html',
+      basemaps: [
+        {
+          id: 'mapbox-streets',
+          name: 'Mapbox Streets',
+          provider: 'mapbox',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('mapbox-streets')).rejects.toThrow(
+      'Enter a valid Mapbox access token, not a URL.',
     );
     expect(map.setStyle).not.toHaveBeenCalled();
   });

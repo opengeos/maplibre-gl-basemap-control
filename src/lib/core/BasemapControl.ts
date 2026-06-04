@@ -3,6 +3,7 @@ import type {
   LayerSpecification,
   Map as MapLibreMap,
   SourceSpecification,
+  StyleSpecification,
 } from 'maplibre-gl';
 import {
   createBasemapCatalog,
@@ -44,6 +45,7 @@ const MAPTILER_API_KEY_EMPTY_QUERY = '?key=';
 const AWS_REGION_PLACEHOLDER = '{aws-region}';
 
 type EventHandlersMap = globalThis.Map<BasemapControlEvent, Set<BasemapControlEventHandler>>;
+type SetStyleOptions = NonNullable<Parameters<MapLibreMap['setStyle']>[1]>;
 
 export class BasemapControl implements IControl {
   private _map?: MapLibreMap;
@@ -70,6 +72,7 @@ export class BasemapControl implements IControl {
   private _mapTilerApiKey = '';
   private _amazonApiKey = '';
   private _awsRegion = '';
+  private _mapboxAccessToken = '';
   private _providerSettingsCollapsed = true;
   private _resizeHandler: (() => void) | null = null;
   private _mapResizeHandler: (() => void) | null = null;
@@ -79,6 +82,7 @@ export class BasemapControl implements IControl {
     this._mapTilerApiKey = options?.mapTilerApiKey ?? '';
     this._amazonApiKey = options?.amazonApiKey ?? '';
     this._awsRegion = options?.awsRegion ?? 'us-east-1';
+    this._mapboxAccessToken = options?.mapboxAccessToken ?? '';
     this._basemaps = createBasemapCatalog(
       options?.basemaps,
       this._options.includeDefaultBasemaps,
@@ -188,6 +192,13 @@ export class BasemapControl implements IControl {
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
+  setMapboxAccessToken(accessToken: string): void {
+    this._mapboxAccessToken = accessToken;
+    this._state = { ...this._state, error: undefined };
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
   getActiveBasemap(): BasemapDefinition | undefined {
     return this._basemaps.find((basemap) => basemap.id === this._state.activeBasemapId);
   }
@@ -217,8 +228,13 @@ export class BasemapControl implements IControl {
         managedRaster = this._addRasterBasemap(basemap);
       } else {
         const styleUrl = this._resolveStyleUrl(basemap);
+        const styleOptions = this._getStyleOptions(basemap);
         this._removeManagedBasemap();
-        this._map.setStyle(styleUrl);
+        if (styleOptions) {
+          this._map.setStyle(styleUrl, styleOptions);
+        } else {
+          this._map.setStyle(styleUrl);
+        }
       }
 
       this._applyBasemapView(basemap);
@@ -484,6 +500,21 @@ export class BasemapControl implements IControl {
       );
     }
 
+    if (this._hasMapboxBasemaps()) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-mapbox-token',
+          type: 'password',
+          placeholder: 'Mapbox access token',
+          ariaLabel: 'Mapbox access token',
+          value: this._mapboxAccessToken,
+          onInput: (value) => {
+            this._mapboxAccessToken = value;
+          },
+        }),
+      );
+    }
+
     if (this._hasAmazonBasemaps()) {
       fields.appendChild(
         this._createProviderSettingsInput({
@@ -538,6 +569,11 @@ export class BasemapControl implements IControl {
     input.type = type;
     input.placeholder = placeholder;
     input.value = value;
+    input.name = ariaLabel.toLowerCase().replace(/\s+/g, '-');
+    input.autocomplete = 'new-password';
+    input.autocapitalize = 'none';
+    input.spellcheck = false;
+    input.setAttribute('autocorrect', 'off');
     input.setAttribute('aria-label', ariaLabel);
     input.addEventListener('input', () => {
       onInput(input.value);
@@ -700,8 +736,12 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'amazon');
   }
 
+  private _hasMapboxBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'mapbox');
+  }
+
   private _hasProviderSettings(): boolean {
-    return this._hasMapTilerBasemaps() || this._hasAmazonBasemaps();
+    return this._hasMapTilerBasemaps() || this._hasAmazonBasemaps() || this._hasMapboxBasemaps();
   }
 
   private _resolveStyleUrl(basemap: BasemapDefinition): string {
@@ -716,6 +756,85 @@ export class BasemapControl implements IControl {
 
     if (basemap.provider === 'maptiler') {
       return this._resolveMapTilerStyleUrl(url);
+    }
+
+    if (basemap.provider === 'mapbox') {
+      return this._resolveMapboxStyleUrl(url);
+    }
+
+    return url;
+  }
+
+  private _getStyleOptions(basemap: BasemapDefinition): SetStyleOptions | undefined {
+    if (basemap.provider === 'mapbox') {
+      return {
+        validate: false,
+        transformStyle: (_previousStyle, nextStyle) =>
+          this._transformMapboxStyle(nextStyle, this._mapboxAccessToken.trim()),
+      };
+    }
+    return undefined;
+  }
+
+  private _transformMapboxStyle(style: StyleSpecification, accessToken: string): StyleSpecification {
+    const encodedAccessToken = encodeURIComponent(accessToken);
+    const sources = Object.fromEntries(
+      Object.entries(style.sources).map(([id, source]) => {
+        if ('url' in source && typeof source.url === 'string') {
+          return [id, { ...source, url: this._resolveMapboxInternalUrl(source.url, encodedAccessToken) }];
+        }
+        return [id, source];
+      }),
+    );
+
+    return {
+      ...style,
+      glyphs:
+        typeof style.glyphs === 'string'
+          ? this._resolveMapboxInternalUrl(style.glyphs, encodedAccessToken)
+          : style.glyphs,
+      sprite: this._resolveMapboxSprite(style.sprite, encodedAccessToken),
+      projection: { type: 'mercator' },
+      sources,
+    };
+  }
+
+  private _resolveMapboxSprite(
+    sprite: StyleSpecification['sprite'],
+    encodedAccessToken: string,
+  ): StyleSpecification['sprite'] {
+    if (typeof sprite === 'string') {
+      return this._resolveMapboxInternalUrl(sprite, encodedAccessToken);
+    }
+
+    if (Array.isArray(sprite)) {
+      return sprite.map((item) => ({
+        ...item,
+        url: this._resolveMapboxInternalUrl(item.url, encodedAccessToken),
+      }));
+    }
+
+    return sprite;
+  }
+
+  private _resolveMapboxInternalUrl(url: string, encodedAccessToken: string): string {
+    if (url.startsWith('mapbox://sprites/')) {
+      const [, owner, styleId] = /^mapbox:\/\/sprites\/([^/]+)\/(.+)$/.exec(url) ?? [];
+      if (owner && styleId) {
+        return `https://api.mapbox.com/styles/v1/${owner}/${styleId}/sprite?access_token=${encodedAccessToken}`;
+      }
+    }
+
+    if (url.startsWith('mapbox://fonts/')) {
+      const [, owner, fontPath] = /^mapbox:\/\/fonts\/([^/]+)\/(.+)$/.exec(url) ?? [];
+      if (owner && fontPath) {
+        return `https://api.mapbox.com/fonts/v1/${owner}/${fontPath}?access_token=${encodedAccessToken}`;
+      }
+    }
+
+    if (url.startsWith('mapbox://')) {
+      const tileset = url.replace(/^mapbox:\/\//, '');
+      return `https://api.mapbox.com/v4/${tileset}.json?secure&access_token=${encodedAccessToken}`;
     }
 
     return url;
@@ -766,6 +885,23 @@ export class BasemapControl implements IControl {
       .join(awsRegion)
       .split(API_KEY_PLACEHOLDER)
       .join(encodeURIComponent(apiKey));
+  }
+
+  private _resolveMapboxStyleUrl(url: string): string {
+    const accessToken = this._mapboxAccessToken.trim();
+
+    if (url.includes(API_KEY_PLACEHOLDER) && !accessToken) {
+      throw new Error('Enter a Mapbox access token before applying this basemap.');
+    }
+    if (this._isUrlLikeCredential(accessToken)) {
+      throw new Error('Enter a valid Mapbox access token, not a URL.');
+    }
+
+    return url.split(API_KEY_PLACEHOLDER).join(encodeURIComponent(accessToken));
+  }
+
+  private _isUrlLikeCredential(value: string): boolean {
+    return /^https?:\/\//i.test(value);
   }
 
   private _addRasterBasemap(basemap: BasemapDefinition): ManagedRasterBasemap | undefined {
