@@ -18,6 +18,7 @@ import type {
   BasemapControlState,
   BasemapDefinition,
   BasemapProvider,
+  ManagedRasterBasemap,
 } from './types';
 
 const DEFAULT_OPTIONS: Required<
@@ -188,10 +189,11 @@ export class BasemapControl implements IControl {
     this._emit({ type: 'statechange', state: this.getState() });
 
     try {
+      let managedRaster: ManagedRasterBasemap | undefined;
       if (basemap.source.type === 'raster') {
         await this._waitForStyleReady();
         this._removeManagedBasemap();
-        this._addRasterBasemap(basemap);
+        managedRaster = this._addRasterBasemap(basemap);
       } else {
         this._removeManagedBasemap();
         this._map.setStyle(basemap.source.url);
@@ -206,7 +208,12 @@ export class BasemapControl implements IControl {
         error: undefined,
       };
       this._renderContent();
-      this._emit({ type: 'basemapchange', state: this.getState(), basemap });
+      this._emit({
+        type: 'basemapchange',
+        state: this.getState(),
+        basemap,
+        managedRaster,
+      });
       this._emit({ type: 'statechange', state: this.getState() });
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
@@ -557,11 +564,12 @@ export class BasemapControl implements IControl {
     return template.content.textContent ?? value;
   }
 
-  private _addRasterBasemap(basemap: BasemapDefinition): void {
-    if (!this._map || basemap.source.type !== 'raster') return;
+  private _addRasterBasemap(basemap: BasemapDefinition): ManagedRasterBasemap | undefined {
+    if (!this._map || basemap.source.type !== 'raster') return undefined;
 
     const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
     const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
+    const beforeId = this._getBasemapInsertBeforeId();
     const source: SourceSpecification = {
       type: 'raster',
       tiles: basemap.source.tiles,
@@ -578,9 +586,15 @@ export class BasemapControl implements IControl {
     };
 
     this._map.addSource(sourceId, source);
-    this._map.addLayer(layer, this._getBasemapInsertBeforeId());
+    this._map.addLayer(layer, beforeId);
     this._managedSourceIds = [sourceId];
     this._managedLayerIds = [layerId];
+
+    return {
+      sourceId,
+      layerId,
+      beforeId,
+    };
   }
 
   private _waitForStyleReady(): Promise<void> {

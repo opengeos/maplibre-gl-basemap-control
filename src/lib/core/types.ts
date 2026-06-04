@@ -67,10 +67,17 @@ export interface BasemapControlState {
   error?: string;
 }
 
+export interface ManagedRasterBasemap {
+  sourceId: string;
+  layerId: string;
+  beforeId?: string;
+}
+
 export interface BasemapChangeEvent {
   type: 'basemapchange';
   state: BasemapControlState;
   basemap: BasemapDefinition;
+  managedRaster?: ManagedRasterBasemap;
 }
 
 export interface BasemapErrorEvent {
