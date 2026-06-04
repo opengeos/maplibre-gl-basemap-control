@@ -23,6 +23,7 @@ export type {
   BasemapErrorEvent,
   BasemapProvider,
   BasemapSourceType,
+  ManagedRasterBasemap,
   RasterBasemapSource,
   StyleBasemapSource,
 } from './lib/core/types';
