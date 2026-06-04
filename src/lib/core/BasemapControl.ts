@@ -37,6 +37,11 @@ const DEFAULT_OPTIONS: Required<
 
 const CONTROL_SOURCE_PREFIX = 'maplibre-basemap-control-source';
 const CONTROL_LAYER_PREFIX = '';
+const API_KEY_PLACEHOLDER = '{api-key}';
+const MAPTILER_API_KEY_EXAMPLE = 'YOUR_MAPTILER_API_KEY';
+const MAPTILER_API_KEY_QUERY = '?key';
+const MAPTILER_API_KEY_EMPTY_QUERY = '?key=';
+const AWS_REGION_PLACEHOLDER = '{aws-region}';
 
 type EventHandlersMap = globalThis.Map<BasemapControlEvent, Set<BasemapControlEventHandler>>;
 
@@ -62,12 +67,18 @@ export class BasemapControl implements IControl {
   private _eventHandlers: EventHandlersMap = new globalThis.Map();
   private _managedSourceIds: string[] = [];
   private _managedLayerIds: string[] = [];
+  private _mapTilerApiKey = '';
+  private _amazonApiKey = '';
+  private _awsRegion = '';
+  private _providerSettingsCollapsed = true;
   private _resizeHandler: (() => void) | null = null;
   private _mapResizeHandler: (() => void) | null = null;
-  private _clickOutsideHandler: ((e: MouseEvent) => void) | null = null;
 
   constructor(options?: BasemapControlOptions) {
     this._options = { ...DEFAULT_OPTIONS, ...options };
+    this._mapTilerApiKey = options?.mapTilerApiKey ?? '';
+    this._amazonApiKey = options?.amazonApiKey ?? '';
+    this._awsRegion = options?.awsRegion ?? 'us-east-1';
     this._basemaps = createBasemapCatalog(
       options?.basemaps,
       this._options.includeDefaultBasemaps,
@@ -120,11 +131,6 @@ export class BasemapControl implements IControl {
       this._map.off('resize', this._mapResizeHandler);
       this._mapResizeHandler = null;
     }
-    if (this._clickOutsideHandler) {
-      document.removeEventListener('click', this._clickOutsideHandler);
-      this._clickOutsideHandler = null;
-    }
-
     this._panel?.parentNode?.removeChild(this._panel);
     this._container?.parentNode?.removeChild(this._container);
 
@@ -167,6 +173,21 @@ export class BasemapControl implements IControl {
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
+  setMapTilerApiKey(apiKey: string): void {
+    this._mapTilerApiKey = apiKey;
+    this._state = { ...this._state, error: undefined };
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setAmazonCredentials(apiKey: string, awsRegion = this._awsRegion): void {
+    this._amazonApiKey = apiKey;
+    this._awsRegion = awsRegion;
+    this._state = { ...this._state, error: undefined };
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
   getActiveBasemap(): BasemapDefinition | undefined {
     return this._basemaps.find((basemap) => basemap.id === this._state.activeBasemapId);
   }
@@ -185,7 +206,7 @@ export class BasemapControl implements IControl {
     }
 
     this._state = { ...this._state, loading: true, error: undefined };
-    this._renderContent();
+    this._renderContent(true);
     this._emit({ type: 'statechange', state: this.getState() });
 
     try {
@@ -195,8 +216,9 @@ export class BasemapControl implements IControl {
         this._removeManagedBasemap();
         managedRaster = this._addRasterBasemap(basemap);
       } else {
+        const styleUrl = this._resolveStyleUrl(basemap);
         this._removeManagedBasemap();
-        this._map.setStyle(basemap.source.url);
+        this._map.setStyle(styleUrl);
       }
 
       this._applyBasemapView(basemap);
@@ -207,7 +229,7 @@ export class BasemapControl implements IControl {
         loading: false,
         error: undefined,
       };
-      this._renderContent();
+      this._renderContent(true);
       this._emit({
         type: 'basemapchange',
         state: this.getState(),
@@ -218,7 +240,7 @@ export class BasemapControl implements IControl {
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       this._state = { ...this._state, loading: false, error: error.message };
-      this._renderContent();
+      this._renderContent(true);
       this._handleError(error, basemap);
       throw error;
     }
@@ -341,18 +363,27 @@ export class BasemapControl implements IControl {
     return panel;
   }
 
-  private _renderContent(): void {
+  private _renderContent(preserveResultsScroll = false): void {
     if (!this._content) return;
 
     const categories = getBasemapCategories(this._basemaps);
     const results = this._getFilteredBasemaps();
+    const previousResultsScrollTop = preserveResultsScroll
+      ? this._content.querySelector('.basemap-control-results')?.scrollTop
+      : undefined;
 
     this._content.replaceChildren(
       this._createSearchRow(),
+      ...(this._hasProviderSettings() ? [this._createProviderSettingsSection()] : []),
       this._createFilterRow(this._providers, categories),
       this._createStatus(results.length),
       this._createResults(results),
     );
+
+    if (previousResultsScrollTop !== undefined) {
+      const resultsElement = this._content.querySelector('.basemap-control-results');
+      if (resultsElement) resultsElement.scrollTop = previousResultsScrollTop;
+    }
   }
 
   private _renderFilteredResults(): void {
@@ -415,6 +446,103 @@ export class BasemapControl implements IControl {
     input.setAttribute('aria-label', 'before_id');
     input.addEventListener('input', () => {
       this._state = { ...this._state, beforeId: input.value };
+      this._emit({ type: 'statechange', state: this.getState() });
+    });
+
+    wrapper.appendChild(input);
+    return wrapper;
+  }
+
+  private _createProviderSettingsSection(): HTMLElement {
+    const details = document.createElement('details');
+    details.className = 'basemap-control-provider-settings';
+    details.open = !this._providerSettingsCollapsed;
+    details.addEventListener('toggle', () => {
+      this._providerSettingsCollapsed = !details.open;
+    });
+
+    const summary = document.createElement('summary');
+    summary.className = 'basemap-control-provider-settings-summary';
+    summary.textContent = 'Provider settings';
+    details.appendChild(summary);
+
+    const fields = document.createElement('div');
+    fields.className = 'basemap-control-provider-settings-fields';
+
+    if (this._hasMapTilerBasemaps()) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-maptiler-key',
+          type: 'password',
+          placeholder: 'MapTiler API key',
+          ariaLabel: 'MapTiler API key',
+          value: this._mapTilerApiKey,
+          onInput: (value) => {
+            this._mapTilerApiKey = value;
+          },
+        }),
+      );
+    }
+
+    if (this._hasAmazonBasemaps()) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-amazon-key',
+          type: 'password',
+          placeholder: 'Amazon API key',
+          ariaLabel: 'Amazon API key',
+          value: this._amazonApiKey,
+          onInput: (value) => {
+            this._amazonApiKey = value;
+          },
+        }),
+      );
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-aws-region',
+          type: 'text',
+          placeholder: 'AWS region',
+          ariaLabel: 'AWS region',
+          value: this._awsRegion,
+          onInput: (value) => {
+            this._awsRegion = value;
+          },
+        }),
+      );
+    }
+
+    details.appendChild(fields);
+    return details;
+  }
+
+  private _createProviderSettingsInput({
+    className,
+    type,
+    placeholder,
+    ariaLabel,
+    value,
+    onInput,
+  }: {
+    className: string;
+    type: string;
+    placeholder: string;
+    ariaLabel: string;
+    value: string;
+    onInput: (value: string) => void;
+  }): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = className;
+
+    const input = document.createElement('input');
+    input.className = 'basemap-control-input';
+    input.type = type;
+    input.placeholder = placeholder;
+    input.value = value;
+    input.setAttribute('aria-label', ariaLabel);
+    input.addEventListener('input', () => {
+      onInput(input.value);
+      this._state = { ...this._state, error: undefined };
+      this._renderFilteredResults();
       this._emit({ type: 'statechange', state: this.getState() });
     });
 
@@ -564,6 +692,82 @@ export class BasemapControl implements IControl {
     return template.content.textContent ?? value;
   }
 
+  private _hasMapTilerBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'maptiler');
+  }
+
+  private _hasAmazonBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'amazon');
+  }
+
+  private _hasProviderSettings(): boolean {
+    return this._hasMapTilerBasemaps() || this._hasAmazonBasemaps();
+  }
+
+  private _resolveStyleUrl(basemap: BasemapDefinition): string {
+    if (basemap.source.type === 'raster') {
+      throw new Error(`Basemap "${basemap.id}" is not a style basemap.`);
+    }
+
+    const url = basemap.source.url;
+    if (basemap.provider === 'amazon') {
+      return this._resolveAmazonStyleUrl(url);
+    }
+
+    if (basemap.provider === 'maptiler') {
+      return this._resolveMapTilerStyleUrl(url);
+    }
+
+    return url;
+  }
+
+  private _resolveMapTilerStyleUrl(url: string): string {
+    const needsMapTilerKey =
+      url.includes(API_KEY_PLACEHOLDER) ||
+      url.includes(MAPTILER_API_KEY_EXAMPLE) ||
+      url.endsWith(MAPTILER_API_KEY_QUERY) ||
+      url.endsWith(MAPTILER_API_KEY_EMPTY_QUERY);
+
+    if (!needsMapTilerKey) return url;
+
+    const apiKey = this._mapTilerApiKey.trim();
+    if (!apiKey) {
+      throw new Error('Enter a MapTiler API key before applying this basemap.');
+    }
+
+    const encodedApiKey = encodeURIComponent(apiKey);
+    if (url.endsWith(MAPTILER_API_KEY_QUERY)) {
+      return `${url}=${encodedApiKey}`;
+    }
+    if (url.endsWith(MAPTILER_API_KEY_EMPTY_QUERY)) {
+      return `${url}${encodedApiKey}`;
+    }
+
+    return url
+      .split(API_KEY_PLACEHOLDER)
+      .join(encodedApiKey)
+      .split(MAPTILER_API_KEY_EXAMPLE)
+      .join(encodedApiKey);
+  }
+
+  private _resolveAmazonStyleUrl(url: string): string {
+    const apiKey = this._amazonApiKey.trim();
+    const awsRegion = this._awsRegion.trim();
+
+    if (url.includes(API_KEY_PLACEHOLDER) && !apiKey) {
+      throw new Error('Enter an Amazon API key before applying this basemap.');
+    }
+    if (url.includes(AWS_REGION_PLACEHOLDER) && !awsRegion) {
+      throw new Error('Enter an AWS region before applying this basemap.');
+    }
+
+    return url
+      .split(AWS_REGION_PLACEHOLDER)
+      .join(awsRegion)
+      .split(API_KEY_PLACEHOLDER)
+      .join(encodeURIComponent(apiKey));
+  }
+
   private _addRasterBasemap(basemap: BasemapDefinition): ManagedRasterBasemap | undefined {
     if (!this._map || basemap.source.type !== 'raster') return undefined;
 
@@ -649,19 +853,6 @@ export class BasemapControl implements IControl {
   }
 
   private _setupEventListeners(): void {
-    this._clickOutsideHandler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        this._container &&
-        this._panel &&
-        !this._container.contains(target) &&
-        !this._panel.contains(target)
-      ) {
-        this.collapse();
-      }
-    };
-    document.addEventListener('click', this._clickOutsideHandler);
-
     this._resizeHandler = () => {
       if (!this._state.collapsed) this._updatePanelPosition();
     };

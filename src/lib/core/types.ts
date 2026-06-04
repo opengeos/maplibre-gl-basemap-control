@@ -49,6 +49,9 @@ export interface BasemapControlOptions {
   title?: string;
   panelWidth?: number;
   className?: string;
+  mapTilerApiKey?: string;
+  amazonApiKey?: string;
+  awsRegion?: string;
   basemaps?: BasemapDefinition[];
   providers?: BasemapProvider[];
   includeDefaultBasemaps?: boolean;

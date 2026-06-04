@@ -8,7 +8,7 @@ A MapLibre GL JS control for searching and switching public basemaps. It keeps t
 ## Features
 
 - Search-first basemap picker inspired by QuickMapServices
-- Built-in no-key catalog for common public basemaps
+- Built-in catalog for common public basemaps, MapTiler styles, and Amazon Location styles
 - Custom basemap and provider definitions
 - MapLibre `IControl` implementation
 - React wrapper and state hook
@@ -131,6 +131,36 @@ const control = new BasemapControl({
 
 Set `includeDefaultBasemaps: false` to use only your supplied catalog.
 
+## Keyed Provider Styles
+
+The built-in catalog includes MapTiler styles such as Streets, Base, Dataviz, Outdoor, Topo,
+Satellite Hybrid, Satellite Plain, Aquarelle, Backdrop, Landscape, Ocean, Toner, OpenStreetMap, and
+Winter. It also includes Amazon Location styles: Standard, Monochrome, Hybrid, and Satellite.
+
+MapTiler and Amazon Location styles require API keys. Users can enter keys in the collapsible
+provider settings section in the control panel, or you can provide them when creating the control.
+
+```typescript
+const control = new BasemapControl({
+  defaultBasemapId: 'maptiler-streets',
+  mapTilerApiKey: 'YOUR_MAPTILER_API_KEY',
+  amazonApiKey: 'YOUR_AMAZON_LOCATION_API_KEY',
+  awsRegion: 'us-east-1',
+});
+```
+
+The default MapTiler style URLs follow this form:
+
+```text
+https://api.maptiler.com/maps/{mapId}/style.json?key={api-key}
+```
+
+Amazon Location style URLs follow this form:
+
+```text
+https://maps.geo.{aws-region}.amazonaws.com/v2/styles/{mapStyle}/descriptor?key={api-key}
+```
+
 ## API
 
 ### BasemapControl Options
@@ -142,6 +172,9 @@ Set `includeDefaultBasemaps: false` to use only your supplied catalog.
 | `title` | `string` | `'Basemaps'` | Panel title and button label |
 | `panelWidth` | `number` | `340` | Floating panel width in pixels |
 | `className` | `string` | `''` | Extra class for the control button container |
+| `mapTilerApiKey` | `string` | `undefined` | Initial MapTiler API key for built-in MapTiler styles |
+| `amazonApiKey` | `string` | `undefined` | Initial Amazon Location API key for built-in Amazon styles |
+| `awsRegion` | `string` | `'us-east-1'` | AWS region for built-in Amazon Location styles |
 | `basemaps` | `BasemapDefinition[]` | `[]` | Custom basemaps to add or use |
 | `providers` | `BasemapProvider[]` | `[]` | Custom provider labels |
 | `includeDefaultBasemaps` | `boolean` | `true` | Include the built-in public catalog |
@@ -150,6 +183,8 @@ Set `includeDefaultBasemaps: false` to use only your supplied catalog.
 ### Methods
 
 - `setBasemap(id)` - Apply a basemap and remove the previous plugin-managed basemap
+- `setMapTilerApiKey(apiKey)` - Set or update the MapTiler API key used by MapTiler styles
+- `setAmazonCredentials(apiKey, awsRegion)` - Set or update Amazon Location credentials
 - `getActiveBasemap()` - Return the current basemap definition
 - `getBasemaps()` - Return the catalog
 - `setBasemaps(basemaps)` - Replace the catalog

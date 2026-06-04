@@ -123,6 +123,22 @@ describe('BasemapControl', () => {
     expect(document.activeElement).toBe(searchInput);
   });
 
+  it('keeps the panel open when clicking outside', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    fireEvent.click(document.body);
+
+    expect(document.querySelector('.basemap-control-panel')?.classList.contains('expanded')).toBe(
+      true,
+    );
+  });
+
   it('filters results from the provider select', () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({
@@ -185,6 +201,24 @@ describe('BasemapControl', () => {
     );
   });
 
+  it('preserves the results scroll position when selecting a basemap', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    const results = document.querySelector<HTMLElement>('.basemap-control-results');
+    expect(results).toBeTruthy();
+    results!.scrollTop = 42;
+
+    await control.setBasemap('one');
+
+    expect(document.querySelector<HTMLElement>('.basemap-control-results')?.scrollTop).toBe(42);
+  });
+
   it('leaves the selected basemap on the map when removed', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({
@@ -243,6 +277,192 @@ describe('BasemapControl', () => {
     await control.setBasemap('style');
 
     expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
+  });
+
+  it('shows provider settings when keyed provider basemaps are available', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      basemaps: [
+        {
+          id: 'maptiler-style',
+          name: 'MapTiler Style',
+          provider: 'maptiler',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.maptiler.com/maps/streets-v4/style.json?key={api-key}',
+          },
+        },
+        {
+          id: 'amazon-style',
+          name: 'Amazon Style',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    expect(screen.getByText('Provider settings')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>('MapTiler API key').value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>('Amazon API key').value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>('AWS region').value).toBe('us-east-1');
+  });
+
+  it('applies MapTiler styles with the configured API key', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      mapTilerApiKey: 'test key',
+      basemaps: [
+        {
+          id: 'maptiler-style',
+          name: 'MapTiler Style',
+          provider: 'maptiler',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.maptiler.com/maps/streets-v4/style.json?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('maptiler-style');
+
+    expect(map.setStyle).toHaveBeenCalledWith(
+      'https://api.maptiler.com/maps/streets-v4/style.json?key=test%20key',
+    );
+  });
+
+  it('applies MapTiler style URLs that end with key query exceptions', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      mapTilerApiKey: 'test key',
+      basemaps: [
+        {
+          id: 'maptiler-openstreetmap',
+          name: 'MapTiler OpenStreetMap',
+          provider: 'maptiler',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.maptiler.com/maps/openstreetmap/style.json?key',
+          },
+        },
+        {
+          id: 'maptiler-toner',
+          name: 'MapTiler Toner',
+          provider: 'maptiler',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.maptiler.com/maps/toner-v2/style.json?key=',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('maptiler-openstreetmap');
+    await control.setBasemap('maptiler-toner');
+
+    expect(map.setStyle).toHaveBeenNthCalledWith(
+      1,
+      'https://api.maptiler.com/maps/openstreetmap/style.json?key=test%20key',
+    );
+    expect(map.setStyle).toHaveBeenNthCalledWith(
+      2,
+      'https://api.maptiler.com/maps/toner-v2/style.json?key=test%20key',
+    );
+  });
+
+  it('applies Amazon styles with the configured API key and region', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      amazonApiKey: 'amazon key',
+      awsRegion: 'eu-central-1',
+      basemaps: [
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('amazon-standard');
+
+    expect(map.setStyle).toHaveBeenCalledWith(
+      'https://maps.geo.eu-central-1.amazonaws.com/v2/styles/Standard/descriptor?key=amazon%20key',
+    );
+  });
+
+  it('requires an Amazon API key before applying Amazon styles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      basemaps: [
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('amazon-standard')).rejects.toThrow(
+      'Enter an Amazon API key before applying this basemap.',
+    );
+    expect(map.setStyle).not.toHaveBeenCalled();
+  });
+
+  it('requires an API key before applying MapTiler styles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      basemaps: [
+        {
+          id: 'maptiler-style',
+          name: 'MapTiler Style',
+          provider: 'maptiler',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://api.maptiler.com/maps/streets-v4/style.json?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('maptiler-style')).rejects.toThrow(
+      'Enter a MapTiler API key before applying this basemap.',
+    );
+    expect(map.setStyle).not.toHaveBeenCalled();
   });
 
   it('applies optional basemap camera settings', async () => {

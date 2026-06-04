@@ -1,20 +1,22 @@
 import type { BasemapDefinition, BasemapProvider } from './types';
 
 export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
-  { id: 'openstreetmap', name: 'OpenStreetMap', category: 'Community' },
-  { id: 'google', name: 'Google', category: 'General' },
+  { id: 'amazon', name: 'Amazon Location', category: 'General' },
   { id: 'carto', name: 'Carto', category: 'General' },
   { id: 'cyclosm', name: 'CyclOSM', category: 'Cycling' },
   { id: 'esri', name: 'ESRI', category: 'Imagery' },
+  { id: 'google', name: 'Google', category: 'General' },
+  { id: 'maptiler', name: 'MapTiler', category: 'General' },
   { id: 'nasa-gibs', name: 'NASA GIBS', category: 'Imagery' },
-  { id: 'openrailwaymap', name: 'OpenRailwayMap', category: 'Transport' },
-  { id: 'opentopomap', name: 'OpenTopoMap', category: 'Terrain' },
+  { id: 'nlmaps', name: 'nlmaps', category: 'Regional' },
   { id: 'openfreemap', name: 'OpenFreeMap', category: 'Vector Styles' },
+  { id: 'openrailwaymap', name: 'OpenRailwayMap', category: 'Transport' },
+  { id: 'openstreetmap', name: 'OpenStreetMap', category: 'Community' },
+  { id: 'opentopomap', name: 'OpenTopoMap', category: 'Terrain' },
   { id: 'swisstopo', name: 'Swiss Federal Geoportal', category: 'Regional' },
   { id: 'topplusopen', name: 'TopPlusOpen', category: 'Regional' },
   { id: 'usgs', name: 'USGS', category: 'United States' },
   { id: 'waymarkedtrails', name: 'Waymarked Trails', category: 'Outdoor' },
-  { id: 'nlmaps', name: 'nlmaps', category: 'Regional' },
 ];
 
 function rasterBasemap({
@@ -49,8 +51,100 @@ function rasterBasemap({
   };
 }
 
+function styleBasemap({
+  id,
+  name,
+  provider,
+  category,
+  description,
+  attribution,
+  url,
+  view,
+  tags = [],
+}: Omit<BasemapDefinition, 'type' | 'source'> & {
+  url: string;
+}): BasemapDefinition {
+  return {
+    id,
+    name,
+    provider,
+    type: 'style',
+    category,
+    description,
+    attribution,
+    source: {
+      type: 'style',
+      url,
+    },
+    view,
+    tags,
+  };
+}
+
+function mapTilerStyleBasemap({
+  id,
+  name,
+  mapId,
+  category,
+  description,
+  url,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  mapId: string;
+  category: string;
+  description: string;
+  url?: string;
+  tags?: string[];
+}): BasemapDefinition {
+  return styleBasemap({
+    id,
+    name,
+    provider: 'maptiler',
+    category,
+    description,
+    attribution: MAPTILER_ATTRIBUTION,
+    url: url ?? `https://api.maptiler.com/maps/${mapId}/style.json?key={api-key}`,
+    tags: ['maptiler', 'vector', 'style', ...tags],
+  });
+}
+
+function amazonStyleBasemap({
+  id,
+  name,
+  mapStyle,
+  category,
+  description,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  mapStyle: string;
+  category: string;
+  description: string;
+  tags?: string[];
+}): BasemapDefinition {
+  return styleBasemap({
+    id,
+    name,
+    provider: 'amazon',
+    category,
+    description,
+    attribution: AMAZON_ATTRIBUTION,
+    url: `https://maps.geo.{aws-region}.amazonaws.com/v2/styles/${mapStyle}/descriptor?key={api-key}`,
+    tags: ['amazon', 'aws', 'location', 'style', ...tags],
+  });
+}
+
+function sortProviders(providers: BasemapProvider[]): BasemapProvider[] {
+  return [...providers].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const AMAZON_ATTRIBUTION = '&copy; Amazon Location Service';
 const CARTO_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const ESRI_ATTRIBUTION = 'Tiles &copy; Esri and the GIS User Community';
+const MAPTILER_ATTRIBUTION = '&copy; MapTiler &copy; OpenStreetMap contributors';
 const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const OPENFREEMAP_ATTRIBUTION = 'OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap';
 
@@ -142,6 +236,152 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     tiles: ['https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'],
     maxzoom: 20,
     tags: ['google', 'hybrid', 'imagery'],
+  }),
+  amazonStyleBasemap({
+    id: 'amazon-standard',
+    name: 'Amazon Standard',
+    mapStyle: 'Standard',
+    category: 'Street',
+    description: 'Amazon Location general-purpose vector map style.',
+    tags: ['standard', 'street'],
+  }),
+  amazonStyleBasemap({
+    id: 'amazon-monochrome',
+    name: 'Amazon Monochrome',
+    mapStyle: 'Monochrome',
+    category: 'Light',
+    description: 'Amazon Location grey scale map style for overlays.',
+    tags: ['monochrome', 'light', 'dataviz'],
+  }),
+  amazonStyleBasemap({
+    id: 'amazon-hybrid',
+    name: 'Amazon Hybrid',
+    mapStyle: 'Hybrid',
+    category: 'Imagery',
+    description: 'Amazon Location satellite imagery with road and label overlay.',
+    tags: ['hybrid', 'satellite', 'imagery', 'labels'],
+  }),
+  amazonStyleBasemap({
+    id: 'amazon-satellite',
+    name: 'Amazon Satellite',
+    mapStyle: 'Satellite',
+    category: 'Imagery',
+    description: 'Amazon Location satellite imagery map style.',
+    tags: ['satellite', 'imagery'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-aquarelle',
+    name: 'MapTiler Aquarelle',
+    mapId: 'aquarelle-v4',
+    category: 'Artistic',
+    description: 'Watercolor-style vector basemap.',
+    tags: ['aquarelle', 'watercolor', 'artistic'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-backdrop',
+    name: 'MapTiler Backdrop',
+    mapId: 'backdrop-v4',
+    category: 'Light',
+    description: 'Subtle monochrome context map.',
+    tags: ['backdrop', 'monochrome', 'context'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-base',
+    name: 'MapTiler Base',
+    mapId: 'base-v4',
+    category: 'Street',
+    description: 'General-purpose vector basemap.',
+    tags: ['base', 'street'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-dataviz',
+    name: 'MapTiler Dataviz',
+    mapId: 'dataviz-v4',
+    category: 'Light',
+    description: 'Minimal basemap for data visualization and overlays.',
+    tags: ['dataviz', 'data', 'light'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-landscape',
+    name: 'MapTiler Landscape',
+    mapId: 'landscape-v4',
+    category: 'Terrain',
+    description: 'Light terrain and hillshade map.',
+    tags: ['landscape', 'terrain', 'hillshade'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-ocean',
+    name: 'MapTiler Ocean',
+    mapId: 'ocean-v4',
+    category: 'Marine',
+    description: 'Ocean bathymetry and marine-focused basemap.',
+    tags: ['ocean', 'marine', 'bathymetry'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-openstreetmap',
+    name: 'MapTiler OpenStreetMap',
+    mapId: 'openstreetmap',
+    category: 'Street',
+    description: 'OpenStreetMap style hosted by MapTiler.',
+    url: 'https://api.maptiler.com/maps/openstreetmap/style.json?key',
+    tags: ['openstreetmap', 'osm', 'street'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-outdoor',
+    name: 'MapTiler Outdoor',
+    mapId: 'outdoor-v4',
+    category: 'Outdoor',
+    description: 'Outdoor recreation basemap with terrain detail.',
+    tags: ['outdoor', 'terrain', 'recreation'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-satellite-hybrid',
+    name: 'MapTiler Satellite Hybrid',
+    mapId: 'hybrid-v4',
+    category: 'Imagery',
+    description: 'Satellite imagery with labels, roads, and borders.',
+    tags: ['satellite', 'hybrid', 'imagery', 'labels'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-satellite-plain',
+    name: 'MapTiler Satellite Plain',
+    mapId: 'satellite-v4',
+    category: 'Imagery',
+    description: 'Satellite imagery without the hybrid reference overlay.',
+    tags: ['satellite', 'imagery'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-streets',
+    name: 'MapTiler Streets',
+    mapId: 'streets-v4',
+    category: 'Street',
+    description: 'Detailed street map for general navigation.',
+    tags: ['streets', 'street', 'navigation'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-toner',
+    name: 'MapTiler Toner',
+    mapId: 'toner-v2',
+    category: 'Dark',
+    description: 'High-contrast monochrome basemap.',
+    url: 'https://api.maptiler.com/maps/toner-v2/style.json?key=',
+    tags: ['toner', 'monochrome', 'contrast'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-topo',
+    name: 'MapTiler Topo',
+    mapId: 'topo-v4',
+    category: 'Terrain',
+    description: 'Topographic basemap with contours and terrain context.',
+    tags: ['topo', 'topographic', 'terrain'],
+  }),
+  mapTilerStyleBasemap({
+    id: 'maptiler-winter',
+    name: 'MapTiler Winter',
+    mapId: 'winter-v4',
+    category: 'Outdoor',
+    description: 'Winter sports and mountain activity basemap.',
+    tags: ['winter', 'skiing', 'outdoor'],
   }),
   rasterBasemap({
     id: 'carto-positron',
@@ -759,7 +999,7 @@ export function combineProviders(
   const byId = new Map<string, BasemapProvider>();
   defaults.forEach((provider) => byId.set(provider.id, provider));
   custom.forEach((provider) => byId.set(provider.id, provider));
-  return [...byId.values()];
+  return sortProviders([...byId.values()]);
 }
 
 export function resolveBasemapProviders(
@@ -779,7 +1019,7 @@ export function resolveBasemapProviders(
       byId.set(basemap.provider, { id: basemap.provider, name: basemap.provider });
     }
   });
-  return [...byId.values()];
+  return sortProviders([...byId.values()]);
 }
 
 export function createBasemapCatalog(
