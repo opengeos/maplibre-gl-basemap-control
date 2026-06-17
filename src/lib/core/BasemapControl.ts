@@ -163,7 +163,10 @@ export class BasemapControl implements IControl {
     this._renderContent();
 
     if (this._state.activeBasemapId) {
-      this._selectBasemap(this._state.activeBasemapId);
+      // Apply the configured default basemap. This always sets it (rather than
+      // routing through the panel's toggle handler) so multiple mode does not
+      // immediately toggle the pre-seeded default basemap back off.
+      this.setBasemap(this._state.activeBasemapId).catch(() => {});
     }
 
     return this._container;

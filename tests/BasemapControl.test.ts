@@ -735,6 +735,26 @@ describe('BasemapControl', () => {
     expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
   });
 
+  it('keeps the default raster basemap applied in multiple mode', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      defaultBasemapId: 'one',
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    // Let the deferred setBasemap promise settle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(control.isBasemapActive('one')).toBe(true);
+    expect(control.getState().activeBasemapIds).toEqual(['one']);
+  });
+
   it('hides the multiple toggle when showMultipleToggle is false', () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({
