@@ -7,6 +7,7 @@ export function BasemapControlReact({
   map,
   onStateChange,
   onBasemapChange,
+  onBasemapRemove,
   onError,
   activeBasemapId,
   ...options
@@ -32,6 +33,13 @@ export function BasemapControlReact({
       control.on('basemapchange', (event) => {
         if (event.type === 'basemapchange') {
           onBasemapChange(event.basemap, event.state);
+        }
+      });
+    }
+    if (onBasemapRemove) {
+      control.on('basemapremove', (event) => {
+        if (event.type === 'basemapremove') {
+          onBasemapRemove(event.basemap, event.state);
         }
       });
     }

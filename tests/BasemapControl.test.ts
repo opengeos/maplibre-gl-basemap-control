@@ -585,6 +585,191 @@ describe('BasemapControl', () => {
     expect(map.setStyle).not.toHaveBeenCalled();
   });
 
+  it('stacks raster basemaps when allowMultiple is enabled', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+    });
+    const handler = vi.fn();
+    control.on('basemapchange', handler);
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+
+    expect(map.removeLayer).not.toHaveBeenCalled();
+    expect(map.removeSource).not.toHaveBeenCalled();
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(map.getLayer('two')).toBeTruthy();
+    expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
+    expect(control.getActiveBasemaps().map((basemap) => basemap.id)).toEqual(['one', 'two']);
+    expect(control.getActiveBasemap()?.id).toBe('two');
+    expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'add' }));
+  });
+
+  it('removes a single managed raster basemap and emits basemapremove', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+    });
+    const removeHandler = vi.fn();
+    control.on('basemapremove', removeHandler);
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+    await control.removeBasemap('one');
+
+    expect(map.removeLayer).toHaveBeenCalledWith('one');
+    expect(map.removeSource).toHaveBeenCalledWith('maplibre-basemap-control-source-one');
+    expect(map.getLayer('one')).toBeUndefined();
+    expect(map.getLayer('two')).toBeTruthy();
+    expect(control.getState().activeBasemapIds).toEqual(['two']);
+    expect(control.getActiveBasemap()?.id).toBe('two');
+    expect(removeHandler).toHaveBeenCalledTimes(1);
+    expect(removeHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'basemapremove',
+        managedRaster: expect.objectContaining({ layerId: 'one' }),
+      }),
+    );
+  });
+
+  it('toggles a raster basemap on the second click in multiple mode', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    fireEvent.click(screen.getByText('One Streets'));
+    await Promise.resolve();
+    expect(control.isBasemapActive('one')).toBe(true);
+    expect(map.getLayer('one')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('One Streets'));
+    await Promise.resolve();
+    expect(control.isBasemapActive('one')).toBe(false);
+    expect(map.getLayer('one')).toBeUndefined();
+  });
+
+  it('clears stacked rasters when a style basemap is selected in multiple mode', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'style',
+          name: 'Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+    await control.setBasemap('style');
+
+    expect(map.removeLayer).toHaveBeenCalledWith('one');
+    expect(map.removeLayer).toHaveBeenCalledWith('two');
+    expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
+    expect(control.getState().activeBasemapIds).toEqual(['style']);
+  });
+
+  it('replaces the active raster when allowMultiple is disabled (default)', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    fireEvent.click(screen.getByText('One Streets'));
+    await Promise.resolve();
+    fireEvent.click(screen.getByText('Two Imagery'));
+    await Promise.resolve();
+
+    expect(map.removeLayer).toHaveBeenCalledWith('one');
+    expect(control.getState().activeBasemapIds).toEqual(['two']);
+  });
+
+  it('switches between replace and add modes via the panel toggle', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    const toggle = screen.getByLabelText<HTMLInputElement>('Add basemaps instead of replacing');
+    expect(toggle.checked).toBe(false);
+    expect(control.getState().allowMultiple).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(control.getState().allowMultiple).toBe(true);
+
+    fireEvent.click(screen.getByText('One Streets'));
+    await Promise.resolve();
+    fireEvent.click(screen.getByText('Two Imagery'));
+    await Promise.resolve();
+
+    expect(map.removeLayer).not.toHaveBeenCalled();
+    expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
+  });
+
+  it('hides the multiple toggle when showMultipleToggle is false', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      showMultipleToggle: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    expect(screen.queryByLabelText('Add basemaps instead of replacing')).toBeNull();
+  });
+
+  it('renders resize handles by default and omits them when disabled', () => {
+    const first = createMockMap();
+    const resizable = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+    first.controlCorner.appendChild(resizable.onAdd(first.map as never));
+    expect(document.querySelectorAll('.basemap-control-resize-handle')).toHaveLength(2);
+    resizable.onRemove();
+
+    const second = createMockMap();
+    const fixed = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      resizable: false,
+    });
+    second.controlCorner.appendChild(fixed.onAdd(second.map as never));
+    expect(document.querySelectorAll('.basemap-control-resize-handle')).toHaveLength(0);
+  });
+
   it('applies optional basemap camera settings', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({

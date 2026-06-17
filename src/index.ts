@@ -22,6 +22,7 @@ export type {
   BasemapDefinition,
   BasemapErrorEvent,
   BasemapProvider,
+  BasemapRemoveEvent,
   BasemapSourceType,
   ManagedRasterBasemap,
   RasterBasemapSource,

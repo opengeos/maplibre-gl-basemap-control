@@ -190,14 +190,50 @@ https://api.mapbox.com/styles/v1/mapbox/{styleId}?access_token={api-key}
 | `providers` | `BasemapProvider[]` | `[]` | Custom provider labels |
 | `includeDefaultBasemaps` | `boolean` | `true` | Include the built-in public catalog |
 | `defaultBasemapId` | `string` | `undefined` | Basemap to apply after the control is added |
+| `allowMultiple` | `boolean` | `false` | Stack raster basemaps instead of replacing the active one |
+| `showMultipleToggle` | `boolean` | `true` | Show the in-panel toggle that switches between adding and replacing |
+| `resizable` | `boolean` | `true` | Allow resizing the panel by dragging its bottom-left or bottom-right corner |
+
+### Multiple Basemaps
+
+By default, selecting a basemap replaces the active one. Set `allowMultiple: true`
+to stack raster basemaps instead: each click adds the selected raster basemap as
+an additional overlay, and clicking an already-active raster basemap removes it.
+This lets a project hold several raster basemaps at once and switch between them by
+toggling the entries in the panel.
+
+```typescript
+const control = new BasemapControl({
+  allowMultiple: true,
+});
+```
+
+The panel also shows an **Add basemaps** toggle so users can switch between adding
+and replacing at runtime. Hide it with `showMultipleToggle: false`.
+
+### Resizable Panel
+
+The panel can be resized by dragging either of its bottom corners (bottom-left or
+bottom-right). The resized width and height are reflected in `state.panelWidth` and
+`state.panelHeight`. Set `resizable: false` to disable the handles.
+
+Style basemaps cannot stack because they replace the entire map style, so selecting
+a style basemap always replaces the active basemaps (and clears any stacked raster
+overlays). Use the `before_id` input to control where each raster basemap is
+inserted relative to existing layers.
 
 ### Methods
 
 - `setBasemap(id)` - Apply a basemap and remove the previous plugin-managed basemap
+- `addBasemap(id)` - Add a raster basemap as an additional overlay (style basemaps replace instead)
+- `removeBasemap(id)` - Remove a previously added managed raster basemap
+- `toggleBasemap(id)` - Add the raster basemap if inactive, otherwise remove it
+- `isBasemapActive(id)` - Whether the basemap is currently active
 - `setMapTilerApiKey(apiKey)` - Set or update the MapTiler API key used by MapTiler styles
 - `setAmazonCredentials(apiKey, awsRegion)` - Set or update Amazon Location credentials
 - `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
-- `getActiveBasemap()` - Return the current basemap definition
+- `getActiveBasemap()` - Return the most recently selected basemap definition
+- `getActiveBasemaps()` - Return all currently active basemap definitions
 - `getBasemaps()` - Return the catalog
 - `setBasemaps(basemaps)` - Replace the catalog
 - `toggle()`, `expand()`, `collapse()` - Control panel visibility
@@ -211,7 +247,8 @@ before that layer.
 
 ### Events
 
-- `basemapchange`
+- `basemapchange` (includes a `mode` of `'replace'` or `'add'`)
+- `basemapremove`
 - `error`
 - `collapse`
 - `expand`

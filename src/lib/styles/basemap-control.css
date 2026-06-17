@@ -53,7 +53,7 @@
 
 .basemap-control-panel {
   position: absolute;
-  min-width: 280px;
+  min-width: 240px;
   max-width: min(420px, calc(100vw - 24px));
   max-height: min(560px, calc(100vh - 24px));
   display: none;
@@ -70,6 +70,17 @@
 .basemap-control-panel.expanded {
   display: flex;
   flex-direction: column;
+}
+
+/* When the user has resized the panel to an explicit height, let the content
+   and results area flex to fill it instead of fitting the content. */
+.basemap-control-panel.is-resized .basemap-control-content {
+  flex: 1 1 auto;
+}
+
+.basemap-control-panel.is-resized .basemap-control-results {
+  flex: 1 1 auto;
+  max-height: none;
 }
 
 .basemap-control-header {
@@ -128,6 +139,30 @@
 .basemap-control-amazon-key,
 .basemap-control-aws-region {
   position: relative;
+}
+
+.basemap-control-multiple-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 1px;
+  color: #374151;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+
+.basemap-control-multiple-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.basemap-control-multiple-toggle-text {
+  flex: 1 1 auto;
 }
 
 .basemap-control-provider-settings {
@@ -298,6 +333,49 @@
 .basemap-control-results::-webkit-scrollbar-thumb {
   border-radius: 3px;
   background: #d1d5db;
+}
+
+.basemap-control-resize-handle {
+  position: absolute;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  z-index: 2;
+  touch-action: none;
+}
+
+.basemap-control-resize-bottom-right {
+  right: 0;
+  cursor: nwse-resize;
+}
+
+.basemap-control-resize-bottom-left {
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.basemap-control-resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-color: #cbd5e1;
+  border-style: solid;
+}
+
+.basemap-control-resize-bottom-right::after {
+  right: 3px;
+  border-width: 0 2px 2px 0;
+}
+
+.basemap-control-resize-bottom-left::after {
+  left: 3px;
+  border-width: 0 0 2px 2px;
+}
+
+.basemap-control-resize-handle:hover::after {
+  border-color: #94a3b8;
 }
 
 @media (max-width: 420px) {

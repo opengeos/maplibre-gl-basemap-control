@@ -12,5 +12,6 @@ export type {
   BasemapDefinition,
   BasemapErrorEvent,
   BasemapProvider,
+  BasemapRemoveEvent,
   BasemapSourceType,
 } from './lib/core/types';
