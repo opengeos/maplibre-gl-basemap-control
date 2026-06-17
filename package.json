@@ -1,6 +1,6 @@
 {
   "name": "maplibre-gl-basemap-control",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A MapLibre GL JS control for searching and switching public basemaps",
   "type": "module",
   "main": "./dist/index.cjs",

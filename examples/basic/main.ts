@@ -31,13 +31,22 @@ map.on('load', () => {
     collapsed: false,
     defaultBasemapId: 'carto-positron',
     panelWidth: 360,
+    // Stack raster basemaps instead of replacing the active one. Click a raster
+    // basemap to add it as an overlay, and click it again to remove it.
+    allowMultiple: true,
   });
 
   map.addControl(basemapControl, 'top-right');
 
   basemapControl.on('basemapchange', (event) => {
     if (event.type === 'basemapchange') {
-      console.log('Basemap changed:', event.basemap.name);
+      console.log(`Basemap ${event.mode === 'add' ? 'added' : 'changed'}:`, event.basemap.name);
+    }
+  });
+
+  basemapControl.on('basemapremove', (event) => {
+    if (event.type === 'basemapremove') {
+      console.log('Basemap removed:', event.basemap.name);
     }
   });
 

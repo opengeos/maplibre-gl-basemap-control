@@ -4,6 +4,8 @@ import type { BasemapControlState } from '../core/types';
 const DEFAULT_STATE: BasemapControlState = {
   collapsed: true,
   panelWidth: 340,
+  activeBasemapIds: [],
+  allowMultiple: false,
   query: '',
   providerFilter: '',
   categoryFilter: '',
@@ -26,7 +28,19 @@ export function useBasemapState(initialState?: Partial<BasemapControlState>) {
   }, []);
 
   const setActiveBasemapId = useCallback((activeBasemapId: string | undefined) => {
-    setState((prev) => ({ ...prev, activeBasemapId }));
+    setState((prev) => ({
+      ...prev,
+      activeBasemapId,
+      activeBasemapIds: activeBasemapId ? [activeBasemapId] : [],
+    }));
+  }, []);
+
+  const setActiveBasemapIds = useCallback((activeBasemapIds: string[]) => {
+    setState((prev) => ({
+      ...prev,
+      activeBasemapIds,
+      activeBasemapId: activeBasemapIds[activeBasemapIds.length - 1],
+    }));
   }, []);
 
   const setQuery = useCallback((query: string) => {
@@ -47,6 +61,7 @@ export function useBasemapState(initialState?: Partial<BasemapControlState>) {
     setCollapsed,
     setPanelWidth,
     setActiveBasemapId,
+    setActiveBasemapIds,
     setQuery,
     reset,
     toggle,
