@@ -72,6 +72,14 @@
   flex-direction: column;
 }
 
+/* When the user has resized the panel, honour the explicit width/height set
+   inline (already clamped to the map bounds in JS) instead of letting the
+   default caps shrink it back down. */
+.basemap-control-panel.is-resized {
+  max-width: none;
+  max-height: none;
+}
+
 /* When the user has resized the panel to an explicit height, let the content
    and results area flex to fill it instead of fitting the content. */
 .basemap-control-panel.is-resized .basemap-control-content {
@@ -379,7 +387,7 @@
 }
 
 @media (max-width: 420px) {
-  .basemap-control-panel {
+  .basemap-control-panel:not(.is-resized) {
     width: calc(100vw - 24px) !important;
   }
 
