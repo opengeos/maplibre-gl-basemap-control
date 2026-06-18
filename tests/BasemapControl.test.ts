@@ -790,6 +790,66 @@ describe('BasemapControl', () => {
     expect(document.querySelectorAll('.basemap-control-resize-handle')).toHaveLength(0);
   });
 
+  it('lets a drag resize the panel beyond the default size caps', () => {
+    const { map, controlCorner } = createMockMap();
+    // Give the map a large viewport so the resize bounds are generous.
+    const mapContainer = map.getContainer() as HTMLElement;
+    mapContainer.getBoundingClientRect = () =>
+      ({
+        width: 1400,
+        height: 900,
+        left: 0,
+        top: 0,
+        right: 1400,
+        bottom: 900,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    const panel = document.querySelector<HTMLElement>('.basemap-control-panel')!;
+    // The default top-right control anchors the resize to the panel's top-right
+    // corner; stub the rect so the drag math is deterministic.
+    panel.getBoundingClientRect = () =>
+      ({
+        width: 340,
+        height: 350,
+        left: 660,
+        top: 50,
+        right: 1000,
+        bottom: 400,
+        x: 660,
+        y: 50,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const handle = document.querySelector<HTMLElement>(
+      '.basemap-control-resize-bottom-right',
+    )!;
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // Drag left and down to grow well past the old 420×560 defaults. jsdom's
+    // synthetic PointerEvent drops clientX/clientY, so dispatch them directly.
+    const move = new Event('pointermove') as Event & {
+      clientX: number;
+      clientY: number;
+    };
+    move.clientX = 100;
+    move.clientY = 750;
+    window.dispatchEvent(move);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(panel.classList.contains('is-resized')).toBe(true);
+    expect(parseInt(panel.style.width, 10)).toBeGreaterThan(420);
+    expect(parseInt(panel.style.height, 10)).toBeGreaterThan(560);
+  });
+
   it('applies optional basemap camera settings', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({
