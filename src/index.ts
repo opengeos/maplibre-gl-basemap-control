@@ -27,6 +27,7 @@ export type {
   ManagedRasterBasemap,
   RasterBasemapSource,
   StyleBasemapSource,
+  StyleReplaceConfirmation,
 } from './lib/core/types';
 
 export {

@@ -76,6 +76,25 @@ export interface BasemapControlOptions {
    * bottom-right corner. Defaults to `true`.
    */
   resizable?: boolean;
+  /**
+   * Called before a style basemap replaces one or more stacked raster
+   * basemaps. A style basemap swaps the whole map style and so discards every
+   * stacked raster overlay; this hook lets the host confirm that destructive
+   * change first. Only invoked in `allowMultiple` mode when at least one raster
+   * basemap is currently stacked. Return (or resolve to) `false` to cancel the
+   * change and keep the current basemaps. When omitted, the style basemap
+   * replaces the stack without prompting, preserving the previous behavior.
+   */
+  confirmStyleReplace?: (
+    confirmation: StyleReplaceConfirmation,
+  ) => boolean | Promise<boolean>;
+}
+
+export interface StyleReplaceConfirmation {
+  /** The style basemap the user selected. */
+  basemap: BasemapDefinition;
+  /** Ids of the stacked raster basemaps that will be removed. */
+  replacedBasemapIds: string[];
 }
 
 export interface BasemapControlState {

@@ -453,6 +453,47 @@ describe('BasemapControl', () => {
     expect(map.setStyle).not.toHaveBeenCalled();
   });
 
+  it('makes a missing-credential error actionable with a help link and reveals the inputs', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      basemaps: [
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('amazon-standard')).rejects.toThrow(
+      'Enter an Amazon API key before applying this basemap.',
+    );
+
+    const status = document.querySelector('.basemap-control-status');
+    expect(status?.classList.contains('is-error')).toBe(true);
+    const link = status?.querySelector<HTMLAnchorElement>('.basemap-control-status-link');
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toBe('Get an Amazon API key');
+    expect(link?.href).toContain('aws.amazon.com');
+    expect(link?.target).toBe('_blank');
+    expect(link?.rel).toBe('noopener noreferrer');
+
+    // The Provider settings section auto-expands so the key input is visible.
+    const details = document.querySelector<HTMLDetailsElement>(
+      '.basemap-control-provider-settings',
+    );
+    expect(details?.open).toBe(true);
+    expect(screen.getByLabelText('Amazon API key')).toBeTruthy();
+  });
+
   it('applies Mapbox styles with the configured access token', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({
@@ -690,6 +731,131 @@ describe('BasemapControl', () => {
     expect(map.removeLayer).toHaveBeenCalledWith('two');
     expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
     expect(control.getState().activeBasemapIds).toEqual(['style']);
+  });
+
+  it('confirms before a style basemap replaces stacked rasters in multiple mode', async () => {
+    const { map, controlCorner } = createMockMap();
+    const confirmStyleReplace = vi.fn().mockResolvedValue(true);
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      confirmStyleReplace,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'style',
+          name: 'Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+    await control.setBasemap('style');
+
+    expect(confirmStyleReplace).toHaveBeenCalledTimes(1);
+    expect(confirmStyleReplace).toHaveBeenCalledWith({
+      basemap: expect.objectContaining({ id: 'style' }),
+      replacedBasemapIds: ['one', 'two'],
+    });
+    expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
+    expect(control.getState().activeBasemapIds).toEqual(['style']);
+  });
+
+  it('keeps stacked rasters when the style-replace confirmation is declined', async () => {
+    const { map, controlCorner } = createMockMap();
+    const confirmStyleReplace = vi.fn().mockResolvedValue(false);
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      confirmStyleReplace,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'style',
+          name: 'Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+    await control.setBasemap('style');
+
+    expect(confirmStyleReplace).toHaveBeenCalledTimes(1);
+    expect(map.setStyle).not.toHaveBeenCalled();
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(map.getLayer('two')).toBeTruthy();
+    expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
+  });
+
+  it('does not confirm a style basemap in single (replace) mode', async () => {
+    const { map, controlCorner } = createMockMap();
+    const confirmStyleReplace = vi.fn().mockResolvedValue(true);
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      confirmStyleReplace,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'style',
+          name: 'Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('one');
+    await control.setBasemap('style');
+
+    expect(confirmStyleReplace).not.toHaveBeenCalled();
+    expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
+  });
+
+  it('keeps stacked rasters when confirmStyleReplace rejects', async () => {
+    const { map, controlCorner } = createMockMap();
+    const confirmStyleReplace = vi.fn().mockRejectedValue(new Error('prompt failed'));
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      confirmStyleReplace,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'style',
+          name: 'Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+    await expect(control.setBasemap('style')).resolves.toBeUndefined();
+
+    expect(confirmStyleReplace).toHaveBeenCalledTimes(1);
+    expect(map.setStyle).not.toHaveBeenCalled();
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(map.getLayer('two')).toBeTruthy();
+    expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
   });
 
   it('replaces the active raster when allowMultiple is disabled (default)', async () => {
