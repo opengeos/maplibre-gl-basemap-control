@@ -826,6 +826,38 @@ describe('BasemapControl', () => {
     expect(map.setStyle).toHaveBeenCalledWith('https://example.com/style.json');
   });
 
+  it('keeps stacked rasters when confirmStyleReplace rejects', async () => {
+    const { map, controlCorner } = createMockMap();
+    const confirmStyleReplace = vi.fn().mockRejectedValue(new Error('prompt failed'));
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      confirmStyleReplace,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'style',
+          name: 'Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+    await expect(control.setBasemap('style')).resolves.toBeUndefined();
+
+    expect(confirmStyleReplace).toHaveBeenCalledTimes(1);
+    expect(map.setStyle).not.toHaveBeenCalled();
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(map.getLayer('two')).toBeTruthy();
+    expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
+  });
+
   it('replaces the active raster when allowMultiple is disabled (default)', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({

@@ -145,6 +145,10 @@ export class BasemapControl implements IControl {
   private _awsRegion = '';
   private _mapboxAccessToken = '';
   private _providerSettingsCollapsed = true;
+  // Provider of the most recent missing-credential error, used to pick the
+  // matching help link. Kept in sync with `_state.error` (both are set together
+  // in `_applyBasemapChange`'s catch) so it is never stale when consulted.
+  private _missingCredentialProvider?: keyof typeof PROVIDER_CREDENTIAL_HELP;
   private _resizeHandler: (() => void) | null = null;
   private _mapResizeHandler: (() => void) | null = null;
   private _resizeAnchor: ResizeAnchor | null = null;
@@ -456,6 +460,10 @@ export class BasemapControl implements IControl {
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       this._state = { ...this._state, loading: false, error: error.message };
+      this._missingCredentialProvider =
+        cause instanceof MissingCredentialError
+          ? (cause.provider as keyof typeof PROVIDER_CREDENTIAL_HELP)
+          : undefined;
       // Reveal the credential inputs so a missing-credential error has an
       // obvious next step instead of dead-ending in a collapsed section.
       if (cause instanceof MissingCredentialError) {
@@ -911,7 +919,7 @@ export class BasemapControl implements IControl {
       // A missing-credential error is otherwise a dead end: append a link to
       // where the credential is issued and point at the Provider settings
       // inputs (which the error also auto-expands).
-      const help = this._credentialHelpForError(this._state.error);
+      const help = this._credentialHelpForError(this._missingCredentialProvider);
       if (help) {
         const actions = document.createElement('span');
         actions.className = 'basemap-control-status-actions';
@@ -937,21 +945,12 @@ export class BasemapControl implements IControl {
     return status;
   }
 
-  // Maps a missing-credential error message to the provider's help link, so the
-  // status can offer a concrete next step. Returns undefined for other errors.
+  // Resolves the help link for a missing-credential provider, so the status can
+  // offer a concrete next step. Returns undefined when there is no such error.
   private _credentialHelpForError(
-    message: string,
+    provider?: keyof typeof PROVIDER_CREDENTIAL_HELP,
   ): { url: string; label: string } | undefined {
-    if (message.includes('Amazon API key') || message.includes('AWS region')) {
-      return PROVIDER_CREDENTIAL_HELP.amazon;
-    }
-    if (message.includes('MapTiler API key')) {
-      return PROVIDER_CREDENTIAL_HELP.maptiler;
-    }
-    if (message.includes('Mapbox access token')) {
-      return PROVIDER_CREDENTIAL_HELP.mapbox;
-    }
-    return undefined;
+    return provider ? PROVIDER_CREDENTIAL_HELP[provider] : undefined;
   }
 
   private _createResults(results: BasemapDefinition[]): HTMLElement {

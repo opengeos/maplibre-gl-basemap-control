@@ -260,9 +260,13 @@
   text-decoration: underline;
 }
 
-.basemap-control-status-link:hover,
-.basemap-control-status-link:focus {
+.basemap-control-status-link:hover {
   text-decoration: none;
+}
+
+.basemap-control-status-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .basemap-control-status-hint {
