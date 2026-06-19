@@ -54,9 +54,41 @@ const MAPTILER_API_KEY_EXAMPLE = 'YOUR_MAPTILER_API_KEY';
 const MAPTILER_API_KEY_QUERY = '?key';
 const MAPTILER_API_KEY_EMPTY_QUERY = '?key=';
 const AWS_REGION_PLACEHOLDER = '{aws-region}';
+
+// Where users can obtain the credentials each provider requires. Surfaced as a
+// "Get a ..." link beside a missing-credential error so the message points at a
+// concrete next step instead of dead-ending.
+const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> = {
+  amazon: {
+    url: 'https://docs.aws.amazon.com/location/latest/developerguide/using-apikeys.html',
+    label: 'Get an Amazon API key',
+  },
+  maptiler: {
+    url: 'https://cloud.maptiler.com/account/keys/',
+    label: 'Get a MapTiler API key',
+  },
+  mapbox: {
+    url: 'https://docs.mapbox.com/help/getting-started/access-tokens/',
+    label: 'Get a Mapbox access token',
+  },
+};
+
 const MIN_PANEL_WIDTH = 240;
 const MIN_PANEL_HEIGHT = 200;
 const PANEL_VIEWPORT_MARGIN = 12;
+
+// Thrown when a style basemap cannot be applied because the provider's
+// credentials are missing. Carries the provider id so the panel can show the
+// matching "Get a ..." link and reveal the provider settings input.
+class MissingCredentialError extends Error {
+  readonly provider: string;
+
+  constructor(message: string, provider: string) {
+    super(message);
+    this.name = 'MissingCredentialError';
+    this.provider = provider;
+  }
+}
 
 interface ResizeAnchor {
   x: number;
@@ -348,6 +380,27 @@ export class BasemapControl implements IControl {
     // Style basemaps replace the entire map style and cannot be stacked.
     const effectiveMode: 'replace' | 'add' = isRaster ? mode : 'replace';
 
+    // A style basemap swaps the whole map style, discarding every stacked
+    // raster overlay. In stack mode that is a destructive, easy-to-trigger
+    // surprise, so give the host a chance to confirm before the rasters are
+    // lost. Skipped in single mode, where replacing the one active basemap is
+    // expected, and when no host confirm hook is provided.
+    if (
+      !isRaster &&
+      this._state.allowMultiple &&
+      this._managedRasters.size > 0 &&
+      this._options.confirmStyleReplace
+    ) {
+      const replacedBasemapIds = [...this._managedRasters.keys()];
+      let confirmed = false;
+      try {
+        confirmed = await this._options.confirmStyleReplace({ basemap, replacedBasemapIds });
+      } catch {
+        confirmed = false;
+      }
+      if (!confirmed) return;
+    }
+
     this._state = { ...this._state, loading: true, error: undefined };
     this._renderContent(true);
     this._emit({ type: 'statechange', state: this.getState() });
@@ -403,6 +456,11 @@ export class BasemapControl implements IControl {
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       this._state = { ...this._state, loading: false, error: error.message };
+      // Reveal the credential inputs so a missing-credential error has an
+      // obvious next step instead of dead-ending in a collapsed section.
+      if (cause instanceof MissingCredentialError) {
+        this._providerSettingsCollapsed = false;
+      }
       this._renderContent(true);
       this._handleError(error, basemap);
       throw error;
@@ -844,12 +902,56 @@ export class BasemapControl implements IControl {
     if (this._state.loading) {
       status.textContent = 'Applying basemap...';
     } else if (this._state.error) {
-      status.textContent = this._state.error;
       status.classList.add('is-error');
+      const message = document.createElement('span');
+      message.className = 'basemap-control-status-message';
+      message.textContent = this._state.error;
+      status.appendChild(message);
+
+      // A missing-credential error is otherwise a dead end: append a link to
+      // where the credential is issued and point at the Provider settings
+      // inputs (which the error also auto-expands).
+      const help = this._credentialHelpForError(this._state.error);
+      if (help) {
+        const actions = document.createElement('span');
+        actions.className = 'basemap-control-status-actions';
+
+        const link = document.createElement('a');
+        link.className = 'basemap-control-status-link';
+        link.href = help.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = help.label;
+        actions.appendChild(link);
+
+        const hint = document.createElement('span');
+        hint.className = 'basemap-control-status-hint';
+        hint.textContent = ', then add it under Provider settings below.';
+        actions.appendChild(hint);
+
+        status.appendChild(actions);
+      }
     } else {
       status.textContent = `${resultCount} basemap${resultCount === 1 ? '' : 's'}`;
     }
     return status;
+  }
+
+  // Maps a missing-credential error message to the provider's help link, so the
+  // status can offer a concrete next step. Returns undefined for other errors.
+  private _credentialHelpForError(
+    message: string,
+  ): { url: string; label: string } | undefined {
+    if (message.includes('Amazon API key') || message.includes('AWS region')) {
+      return PROVIDER_CREDENTIAL_HELP.amazon;
+    }
+    if (message.includes('MapTiler API key')) {
+      return PROVIDER_CREDENTIAL_HELP.maptiler;
+    }
+    if (message.includes('Mapbox access token')) {
+      return PROVIDER_CREDENTIAL_HELP.mapbox;
+    }
+    return undefined;
   }
 
   private _createResults(results: BasemapDefinition[]): HTMLElement {
@@ -1046,7 +1148,10 @@ export class BasemapControl implements IControl {
 
     const apiKey = this._mapTilerApiKey.trim();
     if (!apiKey) {
-      throw new Error('Enter a MapTiler API key before applying this basemap.');
+      throw new MissingCredentialError(
+        'Enter a MapTiler API key before applying this basemap.',
+        'maptiler',
+      );
     }
 
     const encodedApiKey = encodeURIComponent(apiKey);
@@ -1069,10 +1174,16 @@ export class BasemapControl implements IControl {
     const awsRegion = this._awsRegion.trim();
 
     if (url.includes(API_KEY_PLACEHOLDER) && !apiKey) {
-      throw new Error('Enter an Amazon API key before applying this basemap.');
+      throw new MissingCredentialError(
+        'Enter an Amazon API key before applying this basemap.',
+        'amazon',
+      );
     }
     if (url.includes(AWS_REGION_PLACEHOLDER) && !awsRegion) {
-      throw new Error('Enter an AWS region before applying this basemap.');
+      throw new MissingCredentialError(
+        'Enter an AWS region before applying this basemap.',
+        'amazon',
+      );
     }
 
     return url
@@ -1086,10 +1197,16 @@ export class BasemapControl implements IControl {
     const accessToken = this._mapboxAccessToken.trim();
 
     if (url.includes(API_KEY_PLACEHOLDER) && !accessToken) {
-      throw new Error('Enter a Mapbox access token before applying this basemap.');
+      throw new MissingCredentialError(
+        'Enter a Mapbox access token before applying this basemap.',
+        'mapbox',
+      );
     }
     if (this._isUrlLikeCredential(accessToken)) {
-      throw new Error('Enter a valid Mapbox access token, not a URL.');
+      throw new MissingCredentialError(
+        'Enter a valid Mapbox access token, not a URL.',
+        'mapbox',
+      );
     }
 
     return url.split(API_KEY_PLACEHOLDER).join(encodeURIComponent(accessToken));

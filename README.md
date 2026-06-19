@@ -193,6 +193,7 @@ https://api.mapbox.com/styles/v1/mapbox/{styleId}?access_token={api-key}
 | `allowMultiple` | `boolean` | `false` | Stack raster basemaps instead of replacing the active one |
 | `showMultipleToggle` | `boolean` | `true` | Show the in-panel toggle that switches between adding and replacing |
 | `resizable` | `boolean` | `true` | Allow resizing the panel by dragging its bottom-left or bottom-right corner |
+| `confirmStyleReplace` | `(confirmation) => boolean \| Promise<boolean>` | `undefined` | Confirm before a style basemap replaces stacked raster basemaps (only invoked in `allowMultiple` mode with at least one raster stacked); return `false` to cancel |
 
 ### Multiple Basemaps
 
@@ -221,6 +222,22 @@ Style basemaps cannot stack because they replace the entire map style, so select
 a style basemap always replaces the active basemaps (and clears any stacked raster
 overlays). Use the `before_id` input to control where each raster basemap is
 inserted relative to existing layers.
+
+Because that swap is destructive in stack mode, you can pass `confirmStyleReplace`
+to confirm before the stacked rasters are discarded. It is only invoked in
+`allowMultiple` mode when at least one raster basemap is currently stacked, and
+receives the `{ basemap, replacedBasemapIds }` it is about to replace. Return (or
+resolve to) `false` to cancel and keep the current basemaps.
+
+```typescript
+const control = new BasemapControl({
+  allowMultiple: true,
+  confirmStyleReplace: ({ basemap, replacedBasemapIds }) =>
+    window.confirm(
+      `Switching to "${basemap.name}" will remove ${replacedBasemapIds.length} stacked basemap(s). Continue?`,
+    ),
+});
+```
 
 ### Methods
 

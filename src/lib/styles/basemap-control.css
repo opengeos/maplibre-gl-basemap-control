@@ -245,6 +245,30 @@
   color: #b91c1c;
 }
 
+.basemap-control-status-message {
+  display: block;
+}
+
+.basemap-control-status-actions {
+  display: block;
+  margin-top: 2px;
+}
+
+.basemap-control-status-link {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.basemap-control-status-link:hover,
+.basemap-control-status-link:focus {
+  text-decoration: none;
+}
+
+.basemap-control-status-hint {
+  color: inherit;
+}
+
 .basemap-control-results {
   display: flex;
   flex-direction: column;
