@@ -9,6 +9,7 @@ A MapLibre GL JS control for searching and switching public basemaps. It keeps t
 
 - Search-first basemap picker inspired by QuickMapServices
 - Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, and Mapbox styles
+- Stackable traffic overlays for TomTom, HERE, Mapbox, and Google
 - Custom basemap and provider definitions
 - MapLibre `IControl` implementation
 - React wrapper and state hook
@@ -171,6 +172,37 @@ Mapbox style URLs follow this form:
 https://api.mapbox.com/styles/v1/mapbox/{styleId}?access_token={api-key}
 ```
 
+### Traffic Overlays
+
+The catalog ships real-time traffic overlays in the `Traffic` category. They are
+stackable overlays rather than full basemaps, so enable `allowMultiple: true` (or
+toggle "Add basemaps" in the panel) to lay them on top of any basemap. Click an
+active traffic layer again to remove it.
+
+| Basemap id | Provider | Credential |
+|------------|----------|------------|
+| `tomtom-traffic-flow-relative`, `tomtom-traffic-flow-absolute`, `tomtom-traffic-flow-relative-delay` | TomTom | `tomtomApiKey` |
+| `here-traffic-flow` | HERE | `hereApiKey` |
+| `mapbox-traffic` | Mapbox | `mapboxAccessToken` |
+| `google-traffic` | Google | `googleMapsApiKey` |
+
+```typescript
+const control = new BasemapControl({
+  allowMultiple: true,
+  tomtomApiKey: 'YOUR_TOMTOM_API_KEY',
+  hereApiKey: 'YOUR_HERE_API_KEY',
+  mapboxAccessToken: 'YOUR_MAPBOX_ACCESS_TOKEN',
+  googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY',
+});
+```
+
+The TomTom and HERE overlays are transparent raster flow tiles; Mapbox Traffic is
+a vector overlay colored by congestion level. Google Traffic uses the
+[Map Tiles API](https://developers.google.com/maps/documentation/tile/session_tokens):
+the control creates a tile session (with `layerTypes: ['layerTraffic']`) using your
+key, caches the session token until it expires, then loads the traffic tiles. The
+key must have the Map Tiles API enabled.
+
 ## API
 
 ### BasemapControl Options
@@ -185,7 +217,10 @@ https://api.mapbox.com/styles/v1/mapbox/{styleId}?access_token={api-key}
 | `mapTilerApiKey` | `string` | `undefined` | Initial MapTiler API key for built-in MapTiler styles |
 | `amazonApiKey` | `string` | `undefined` | Initial Amazon Location API key for built-in Amazon styles |
 | `awsRegion` | `string` | `'us-east-1'` | AWS region for built-in Amazon Location styles |
-| `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles |
+| `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles and the Mapbox Traffic overlay |
+| `tomtomApiKey` | `string` | `undefined` | Initial TomTom API key for the TomTom Traffic overlays |
+| `hereApiKey` | `string` | `undefined` | Initial HERE API key for the HERE Traffic overlay |
+| `googleMapsApiKey` | `string` | `undefined` | Initial Google Maps API key (Map Tiles API) for the Google Traffic overlay |
 | `basemaps` | `BasemapDefinition[]` | `[]` | Custom basemaps to add or use |
 | `providers` | `BasemapProvider[]` | `[]` | Custom provider labels |
 | `includeDefaultBasemaps` | `boolean` | `true` | Include the built-in public catalog |
@@ -249,6 +284,9 @@ const control = new BasemapControl({
 - `setMapTilerApiKey(apiKey)` - Set or update the MapTiler API key used by MapTiler styles
 - `setAmazonCredentials(apiKey, awsRegion)` - Set or update Amazon Location credentials
 - `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
+- `setTomTomApiKey(apiKey)` - Set or update the TomTom API key used by TomTom Traffic overlays
+- `setHereApiKey(apiKey)` - Set or update the HERE API key used by the HERE Traffic overlay
+- `setGoogleMapsApiKey(apiKey)` - Set or update the Google Maps API key used by the Google Traffic overlay
 - `getActiveBasemap()` - Return the most recently selected basemap definition
 - `getActiveBasemaps()` - Return all currently active basemap definitions
 - `getBasemaps()` - Return the catalog

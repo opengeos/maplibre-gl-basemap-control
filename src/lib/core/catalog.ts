@@ -6,6 +6,7 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: 'cyclosm', name: 'CyclOSM', category: 'Cycling' },
   { id: 'esri', name: 'ESRI', category: 'Imagery' },
   { id: 'google', name: 'Google', category: 'General' },
+  { id: 'here', name: 'HERE', category: 'Traffic' },
   { id: 'mapbox', name: 'Mapbox', category: 'General' },
   { id: 'maptiler', name: 'MapTiler', category: 'General' },
   { id: 'nasa-gibs', name: 'NASA GIBS', category: 'Imagery' },
@@ -15,6 +16,7 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: 'openstreetmap', name: 'OpenStreetMap', category: 'Community' },
   { id: 'opentopomap', name: 'OpenTopoMap', category: 'Terrain' },
   { id: 'swisstopo', name: 'Swiss Federal Geoportal', category: 'Regional' },
+  { id: 'tomtom', name: 'TomTom', category: 'Traffic' },
   { id: 'topplusopen', name: 'TopPlusOpen', category: 'Regional' },
   { id: 'usgs', name: 'USGS', category: 'United States' },
   { id: 'waymarkedtrails', name: 'Waymarked Trails', category: 'Outdoor' },
@@ -176,6 +178,58 @@ const MAPBOX_ATTRIBUTION = '&copy; Mapbox &copy; OpenStreetMap contributors';
 const MAPTILER_ATTRIBUTION = '&copy; MapTiler &copy; OpenStreetMap contributors';
 const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const OPENFREEMAP_ATTRIBUTION = 'OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap';
+const TOMTOM_ATTRIBUTION = '&copy; TomTom';
+const HERE_ATTRIBUTION = '&copy; HERE';
+const GOOGLE_ATTRIBUTION = '&copy; Google';
+
+// Congestion color ramp shared by the Mapbox Traffic vector overlay. Mapbox
+// Traffic v1 encodes each road segment's level in a `congestion` property, so a
+// single line layer can color the whole network with a data-driven `match`.
+const MAPBOX_TRAFFIC_CONGESTION_COLORS = [
+  'match',
+  ['get', 'congestion'],
+  'low',
+  '#4caf50',
+  'moderate',
+  '#ffc107',
+  'heavy',
+  '#ff5722',
+  'severe',
+  '#b71c1c',
+  '#9e9e9e',
+];
+
+function rasterTrafficBasemap({
+  id,
+  name,
+  provider,
+  description,
+  attribution,
+  tiles,
+  maxzoom = 22,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  attribution: string;
+  tiles: string[];
+  maxzoom?: number;
+  tags?: string[];
+}): BasemapDefinition {
+  return rasterBasemap({
+    id,
+    name,
+    provider,
+    category: 'Traffic',
+    description,
+    attribution,
+    tiles,
+    maxzoom,
+    tags: ['traffic', 'overlay', ...tags],
+  });
+}
 
 export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
   rasterBasemap({
@@ -1082,6 +1136,92 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
       pitch: 60,
     },
     tags: ['openfreemap', 'vector', 'style', '3d', 'liberty'],
+  },
+  rasterTrafficBasemap({
+    id: 'tomtom-traffic-flow-relative',
+    name: 'TomTom Traffic Flow',
+    provider: 'tomtom',
+    description: 'TomTom traffic speeds relative to free-flow speed. Requires a TomTom API key.',
+    attribution: TOMTOM_ATTRIBUTION,
+    tiles: ['https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key={api-key}'],
+    tags: ['tomtom', 'flow', 'relative'],
+  }),
+  rasterTrafficBasemap({
+    id: 'tomtom-traffic-flow-absolute',
+    name: 'TomTom Traffic Flow Absolute',
+    provider: 'tomtom',
+    description: 'TomTom traffic colored by absolute speed. Requires a TomTom API key.',
+    attribution: TOMTOM_ATTRIBUTION,
+    tiles: ['https://api.tomtom.com/traffic/map/4/tile/flow/absolute/{z}/{x}/{y}.png?key={api-key}'],
+    tags: ['tomtom', 'flow', 'absolute'],
+  }),
+  rasterTrafficBasemap({
+    id: 'tomtom-traffic-flow-relative-delay',
+    name: 'TomTom Traffic Flow Delay',
+    provider: 'tomtom',
+    description:
+      'TomTom traffic highlighting only roads delayed below free-flow speed. Requires a TomTom API key.',
+    attribution: TOMTOM_ATTRIBUTION,
+    tiles: [
+      'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.png?key={api-key}',
+    ],
+    tags: ['tomtom', 'flow', 'delay'],
+  }),
+  rasterTrafficBasemap({
+    id: 'here-traffic-flow',
+    name: 'HERE Traffic Flow',
+    provider: 'here',
+    description: 'HERE real-time traffic flow overlay. Requires a HERE API key.',
+    attribution: HERE_ATTRIBUTION,
+    tiles: ['https://traffic.maps.hereapi.com/v3/flow/mc/{z}/{x}/{y}/png?apiKey={api-key}'],
+    tags: ['here', 'flow'],
+  }),
+  {
+    id: 'mapbox-traffic',
+    name: 'Mapbox Traffic',
+    provider: 'mapbox',
+    type: 'vector-overlay',
+    category: 'Traffic',
+    description:
+      'Mapbox real-time traffic congestion overlay. Requires a Mapbox access token.',
+    attribution: MAPBOX_ATTRIBUTION,
+    source: {
+      type: 'vector-overlay',
+      url: 'mapbox://mapbox.mapbox-traffic-v1',
+      sourceLayer: 'traffic',
+      layerType: 'line',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round',
+      },
+      paint: {
+        'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.5, 14, 4, 18, 8],
+        'line-color': MAPBOX_TRAFFIC_CONGESTION_COLORS,
+      },
+    },
+    tags: ['mapbox', 'traffic', 'overlay', 'congestion'],
+  },
+  {
+    id: 'google-traffic',
+    name: 'Google Traffic',
+    provider: 'google',
+    type: 'raster',
+    category: 'Traffic',
+    description:
+      'Google real-time traffic overlay via the Map Tiles API. Requires a Google Maps API key.',
+    attribution: GOOGLE_ATTRIBUTION,
+    source: {
+      type: 'raster',
+      tiles: ['https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session={session}&key={api-key}'],
+      tileSize: 256,
+      maxzoom: 22,
+      googleSession: {
+        mapType: 'roadmap',
+        layerTypes: ['layerTraffic'],
+        overlay: true,
+      },
+    },
+    tags: ['google', 'traffic', 'overlay'],
   },
 ];
 

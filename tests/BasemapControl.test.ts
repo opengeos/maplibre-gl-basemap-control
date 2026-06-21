@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BasemapControl } from '../src/lib/core/BasemapControl';
 import type { BasemapDefinition } from '../src/lib/core/types';
 
+// Drains pending microtasks so a panel click's async basemap application
+// (which may resolve provider credentials before adding the layer) settles.
+const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const basemaps: BasemapDefinition[] = [
   {
     id: 'one',
@@ -694,12 +698,12 @@ describe('BasemapControl', () => {
     controlCorner.appendChild(control.onAdd(map as never));
 
     fireEvent.click(screen.getByText('One Streets'));
-    await Promise.resolve();
+    await flushAsync();
     expect(control.isBasemapActive('one')).toBe(true);
     expect(map.getLayer('one')).toBeTruthy();
 
     fireEvent.click(screen.getByText('One Streets'));
-    await Promise.resolve();
+    await flushAsync();
     expect(control.isBasemapActive('one')).toBe(false);
     expect(map.getLayer('one')).toBeUndefined();
   });
@@ -868,9 +872,9 @@ describe('BasemapControl', () => {
 
     controlCorner.appendChild(control.onAdd(map as never));
     fireEvent.click(screen.getByText('One Streets'));
-    await Promise.resolve();
+    await flushAsync();
     fireEvent.click(screen.getByText('Two Imagery'));
-    await Promise.resolve();
+    await flushAsync();
 
     expect(map.removeLayer).toHaveBeenCalledWith('one');
     expect(control.getState().activeBasemapIds).toEqual(['two']);
@@ -893,9 +897,9 @@ describe('BasemapControl', () => {
     expect(control.getState().allowMultiple).toBe(true);
 
     fireEvent.click(screen.getByText('One Streets'));
-    await Promise.resolve();
+    await flushAsync();
     fireEvent.click(screen.getByText('Two Imagery'));
-    await Promise.resolve();
+    await flushAsync();
 
     expect(map.removeLayer).not.toHaveBeenCalled();
     expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
@@ -913,8 +917,8 @@ describe('BasemapControl', () => {
 
     controlCorner.appendChild(control.onAdd(map as never));
     // Let the deferred setBasemap promise settle.
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushAsync();
+    await flushAsync();
 
     expect(map.getLayer('one')).toBeTruthy();
     expect(control.isBasemapActive('one')).toBe(true);
@@ -1049,5 +1053,162 @@ describe('BasemapControl', () => {
       bearing: 55.2,
       pitch: 60,
     });
+  });
+});
+
+// Reads the source spec the control handed to map.addSource for a basemap id.
+function lastSourceFor(map: ReturnType<typeof createMockMap>['map'], basemapId: string) {
+  const sourceId = `maplibre-basemap-control-source-${basemapId}`;
+  const call = [...map.addSource.mock.calls].reverse().find((args) => args[0] === sourceId);
+  return call?.[1] as { tiles?: string[]; url?: string } | undefined;
+}
+
+function lastLayerFor(map: ReturnType<typeof createMockMap>['map'], basemapId: string) {
+  const call = [...map.addLayer.mock.calls].reverse().find((args) => args[0]?.id === basemapId);
+  return call?.[0] as
+    | { id: string; type: string; 'source-layer'?: string; paint?: Record<string, unknown> }
+    | undefined;
+}
+
+describe('BasemapControl traffic overlays', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    globalThis.fetch = originalFetch;
+  });
+
+  it('reports a missing TomTom key and skips adding the layer', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ collapsed: false, allowMultiple: true });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.addBasemap('tomtom-traffic-flow-relative')).rejects.toThrow(
+      /TomTom API key/,
+    );
+    expect(control.getState().error).toMatch(/TomTom API key/);
+    expect(lastSourceFor(map, 'tomtom-traffic-flow-relative')).toBeUndefined();
+    // The missing-credential error reveals the provider settings and a help link.
+    expect(screen.getByText('Get a TomTom API key')).toBeTruthy();
+  });
+
+  it('substitutes the TomTom API key into the raster tiles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      tomtomApiKey: 'tt-secret',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('tomtom-traffic-flow-relative');
+
+    expect(lastSourceFor(map, 'tomtom-traffic-flow-relative')?.tiles?.[0]).toBe(
+      'https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=tt-secret',
+    );
+    expect(control.isBasemapActive('tomtom-traffic-flow-relative')).toBe(true);
+  });
+
+  it('substitutes the HERE API key into the raster tiles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      hereApiKey: 'here-secret',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('here-traffic-flow');
+
+    expect(lastSourceFor(map, 'here-traffic-flow')?.tiles?.[0]).toBe(
+      'https://traffic.maps.hereapi.com/v3/flow/mc/{z}/{x}/{y}/png?apiKey=here-secret',
+    );
+  });
+
+  it('renders Mapbox traffic as a vector overlay pointed at the token-authorized TileJSON', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      mapboxAccessToken: 'pk.test',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('mapbox-traffic');
+
+    expect(lastSourceFor(map, 'mapbox-traffic')?.url).toBe(
+      'https://api.mapbox.com/v4/mapbox.mapbox-traffic-v1.json?secure&access_token=pk.test',
+    );
+    const layer = lastLayerFor(map, 'mapbox-traffic');
+    expect(layer?.type).toBe('line');
+    expect(layer?.['source-layer']).toBe('traffic');
+    expect(layer?.paint?.['line-color']).toBeDefined();
+  });
+
+  it('reports a missing Mapbox token for the traffic overlay', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ collapsed: false, allowMultiple: true });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.addBasemap('mapbox-traffic')).rejects.toThrow(/Mapbox access token/);
+    expect(lastSourceFor(map, 'mapbox-traffic')).toBeUndefined();
+  });
+
+  it('creates a Google tile session and substitutes the token, caching it across adds', async () => {
+    const { map, controlCorner } = createMockMap();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ session: 'sess-123', expiry: String(Math.floor(Date.now() / 1000) + 3600) }),
+      text: async () => '',
+    }));
+    globalThis.fetch = fetchMock as never;
+
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      googleMapsApiKey: 'g-secret',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('google-traffic');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://tile.googleapis.com/v1/createSession?key=g-secret');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      mapType: 'roadmap',
+      layerTypes: ['layerTraffic'],
+      overlay: true,
+    });
+    expect(lastSourceFor(map, 'google-traffic')?.tiles?.[0]).toBe(
+      'https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=sess-123&key=g-secret',
+    );
+
+    // Re-adding reuses the cached session token instead of creating a new one.
+    await control.removeBasemap('google-traffic');
+    await control.addBasemap('google-traffic');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a Google session failure with the API error message', async () => {
+    const { map, controlCorner } = createMockMap();
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({}),
+      text: async () => JSON.stringify({ error: { message: 'Map Tiles API has not been used' } }),
+    })) as never;
+
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      googleMapsApiKey: 'g-secret',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.addBasemap('google-traffic')).rejects.toThrow(/Map Tiles API/);
+    expect(control.getState().error).toMatch(/HTTP 403/);
   });
 });
