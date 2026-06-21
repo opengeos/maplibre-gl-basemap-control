@@ -203,6 +203,14 @@ the control creates a tile session (with `layerTypes: ['layerTraffic']`) using y
 key, caches the session token until it expires, then loads the traffic tiles. The
 key must have the Map Tiles API enabled.
 
+> **Troubleshooting `API_KEY_SERVICE_BLOCKED`** ("Requests to this API tile method
+> ...Bootstrap are blocked"): this is a key restriction, not project API
+> enablement. Enabling the Map Tiles API on the project is not enough if the key
+> itself has an API allow-list. In Cloud Console go to **APIs & Services →
+> Credentials → your key → API restrictions** and either choose "Don't restrict
+> key" or add **Map Tiles API** to the allowed list, then save (changes can take a
+> few minutes to propagate). Make sure billing is enabled on the project too.
+
 ## API
 
 ### BasemapControl Options
