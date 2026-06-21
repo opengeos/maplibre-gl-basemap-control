@@ -19,7 +19,9 @@ import type {
   BasemapControlState,
   BasemapDefinition,
   BasemapProvider,
+  GoogleSessionConfig,
   ManagedRasterBasemap,
+  VectorOverlayBasemapSource,
 } from './types';
 
 const DEFAULT_OPTIONS: Required<
@@ -70,6 +72,18 @@ const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
   mapbox: {
     url: 'https://docs.mapbox.com/help/getting-started/access-tokens/',
     label: 'Get a Mapbox access token',
+  },
+  tomtom: {
+    url: 'https://developer.tomtom.com/how-to-get-tomtom-api-key',
+    label: 'Get a TomTom API key',
+  },
+  here: {
+    url: 'https://www.here.com/get-started/pricing',
+    label: 'Get a HERE API key',
+  },
+  google: {
+    url: 'https://developers.google.com/maps/documentation/tile/get-api-key',
+    label: 'Get a Google Maps API key',
   },
 };
 
@@ -144,6 +158,14 @@ export class BasemapControl implements IControl {
   private _amazonApiKey = '';
   private _awsRegion = '';
   private _mapboxAccessToken = '';
+  private _tomtomApiKey = '';
+  private _hereApiKey = '';
+  private _googleMapsApiKey = '';
+  // Cached Google Map Tiles API session tokens keyed by their session config, so
+  // a traffic overlay reuses a token until it expires instead of creating a new
+  // session on every add. Keyed by the serialized config + API key.
+  private _googleSessions: globalThis.Map<string, { token: string; expiry: number }> =
+    new globalThis.Map();
   private _providerSettingsCollapsed = true;
   // Provider of the most recent missing-credential error, used to pick the
   // matching help link. Kept in sync with `_state.error` (both are set together
@@ -160,6 +182,9 @@ export class BasemapControl implements IControl {
     this._amazonApiKey = options?.amazonApiKey ?? '';
     this._awsRegion = options?.awsRegion ?? 'us-east-1';
     this._mapboxAccessToken = options?.mapboxAccessToken ?? '';
+    this._tomtomApiKey = options?.tomtomApiKey ?? '';
+    this._hereApiKey = options?.hereApiKey ?? '';
+    this._googleMapsApiKey = options?.googleMapsApiKey ?? '';
     this._basemaps = createBasemapCatalog(
       options?.basemaps,
       this._options.includeDefaultBasemaps,
@@ -307,6 +332,29 @@ export class BasemapControl implements IControl {
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
+  setTomTomApiKey(apiKey: string): void {
+    this._tomtomApiKey = apiKey;
+    this._state = { ...this._state, error: undefined };
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setHereApiKey(apiKey: string): void {
+    this._hereApiKey = apiKey;
+    this._state = { ...this._state, error: undefined };
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setGoogleMapsApiKey(apiKey: string): void {
+    this._googleMapsApiKey = apiKey;
+    // A new key invalidates any session tokens minted with the previous one.
+    this._googleSessions.clear();
+    this._state = { ...this._state, error: undefined };
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
   getActiveBasemap(): BasemapDefinition | undefined {
     return this._basemaps.find((basemap) => basemap.id === this._state.activeBasemapId);
   }
@@ -380,9 +428,11 @@ export class BasemapControl implements IControl {
       throw error;
     }
 
-    const isRaster = basemap.source.type === 'raster';
-    // Style basemaps replace the entire map style and cannot be stacked.
-    const effectiveMode: 'replace' | 'add' = isRaster ? mode : 'replace';
+    // Raster and vector overlays stack on top of the active basemap; style
+    // basemaps replace the entire map style and cannot be stacked.
+    const isOverlay =
+      basemap.source.type === 'raster' || basemap.source.type === 'vector-overlay';
+    const effectiveMode: 'replace' | 'add' = isOverlay ? mode : 'replace';
 
     // A style basemap swaps the whole map style, discarding every stacked
     // raster overlay. In stack mode that is a destructive, easy-to-trigger
@@ -390,7 +440,7 @@ export class BasemapControl implements IControl {
     // lost. Skipped in single mode, where replacing the one active basemap is
     // expected, and when no host confirm hook is provided.
     if (
-      !isRaster &&
+      !isOverlay &&
       this._state.allowMultiple &&
       this._managedRasters.size > 0 &&
       this._options.confirmStyleReplace
@@ -411,16 +461,16 @@ export class BasemapControl implements IControl {
 
     try {
       let managedRaster: ManagedRasterBasemap | undefined;
-      if (isRaster) {
+      if (isOverlay) {
         await this._waitForStyleReady();
         if (effectiveMode === 'replace') {
           this._removeManagedBasemap();
         } else {
-          // Re-selecting an already-managed raster re-adds it on top using the
+          // Re-selecting an already-managed overlay re-adds it on top using the
           // current before_id, so drop the previous instance first.
           this._removeManagedRaster(basemap.id);
         }
-        managedRaster = this._addRasterBasemap(basemap);
+        managedRaster = await this._addOverlay(basemap);
       } else {
         const styleUrl = this._resolveStyleUrl(basemap);
         const styleOptions = this._getStyleOptions(basemap);
@@ -481,8 +531,9 @@ export class BasemapControl implements IControl {
   // In multiple mode a raster basemap click toggles the overlay on or off.
   private _selectBasemap(id: string): void {
     const basemap = this._basemaps.find((candidate) => candidate.id === id);
-    const isRaster = basemap?.source.type === 'raster';
-    if (this._state.allowMultiple && isRaster) {
+    const isOverlay =
+      basemap?.source.type === 'raster' || basemap?.source.type === 'vector-overlay';
+    if (this._state.allowMultiple && isOverlay) {
       this.toggleBasemap(id).catch(() => {});
       return;
     }
@@ -776,6 +827,53 @@ export class BasemapControl implements IControl {
       );
     }
 
+    if (this._hasTomTomBasemaps()) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-tomtom-key',
+          type: 'password',
+          placeholder: 'TomTom API key',
+          ariaLabel: 'TomTom API key',
+          value: this._tomtomApiKey,
+          onInput: (value) => {
+            this._tomtomApiKey = value;
+          },
+        }),
+      );
+    }
+
+    if (this._hasHereBasemaps()) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-here-key',
+          type: 'password',
+          placeholder: 'HERE API key',
+          ariaLabel: 'HERE API key',
+          value: this._hereApiKey,
+          onInput: (value) => {
+            this._hereApiKey = value;
+          },
+        }),
+      );
+    }
+
+    if (this._hasGoogleApiKeyBasemaps()) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          className: 'basemap-control-google-key',
+          type: 'password',
+          placeholder: 'Google Maps API key',
+          ariaLabel: 'Google Maps API key',
+          value: this._googleMapsApiKey,
+          onInput: (value) => {
+            this._googleMapsApiKey = value;
+            // Changing the key invalidates cached session tokens.
+            this._googleSessions.clear();
+          },
+        }),
+      );
+    }
+
     if (this._hasAmazonBasemaps()) {
       fields.appendChild(
         this._createProviderSettingsInput({
@@ -995,7 +1093,12 @@ export class BasemapControl implements IControl {
 
       const type = document.createElement('span');
       type.className = 'basemap-control-result-type';
-      type.textContent = basemap.type === 'raster' ? 'Raster' : 'Style';
+      type.textContent =
+        basemap.type === 'raster'
+          ? 'Raster'
+          : basemap.type === 'vector-overlay'
+            ? 'Overlay'
+            : 'Style';
 
       row.appendChild(main);
       row.appendChild(type);
@@ -1036,12 +1139,40 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'mapbox');
   }
 
+  private _hasTomTomBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'tomtom');
+  }
+
+  private _hasHereBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'here');
+  }
+
+  // True when a Google basemap needs a Map Tiles API key. The existing Google
+  // raster basemaps (Maps/Satellite/etc.) use keyless tiles, so only session or
+  // api-key based Google layers (e.g. Google Traffic) require the key input.
+  private _hasGoogleApiKeyBasemaps(): boolean {
+    return this._basemaps.some(
+      (basemap) =>
+        basemap.provider === 'google' &&
+        basemap.source.type === 'raster' &&
+        (Boolean(basemap.source.googleSession) ||
+          basemap.source.tiles.some((tile) => tile.includes(API_KEY_PLACEHOLDER))),
+    );
+  }
+
   private _hasProviderSettings(): boolean {
-    return this._hasMapTilerBasemaps() || this._hasAmazonBasemaps() || this._hasMapboxBasemaps();
+    return (
+      this._hasMapTilerBasemaps() ||
+      this._hasAmazonBasemaps() ||
+      this._hasMapboxBasemaps() ||
+      this._hasTomTomBasemaps() ||
+      this._hasHereBasemaps() ||
+      this._hasGoogleApiKeyBasemaps()
+    );
   }
 
   private _resolveStyleUrl(basemap: BasemapDefinition): string {
-    if (basemap.source.type === 'raster') {
+    if (basemap.source.type !== 'style' && basemap.source.type !== 'vector-style') {
       throw new Error(`Basemap "${basemap.id}" is not a style basemap.`);
     }
 
@@ -1215,15 +1346,30 @@ export class BasemapControl implements IControl {
     return /^https?:\/\//i.test(value);
   }
 
-  private _addRasterBasemap(basemap: BasemapDefinition): ManagedRasterBasemap | undefined {
+  // Add a stackable overlay (raster tiles or a vector overlay) to the map,
+  // resolving any provider credentials first.
+  private async _addOverlay(
+    basemap: BasemapDefinition,
+  ): Promise<ManagedRasterBasemap | undefined> {
+    if (basemap.source.type === 'vector-overlay') {
+      return this._addVectorOverlay(basemap, basemap.source);
+    }
+    return this._addRasterBasemap(basemap);
+  }
+
+  private async _addRasterBasemap(
+    basemap: BasemapDefinition,
+  ): Promise<ManagedRasterBasemap | undefined> {
     if (!this._map || basemap.source.type !== 'raster') return undefined;
+
+    const tiles = await this._resolveRasterTiles(basemap);
 
     const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
     const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
     const beforeId = this._getBasemapInsertBeforeId();
     const source: SourceSpecification = {
       type: 'raster',
-      tiles: basemap.source.tiles,
+      tiles,
       tileSize: basemap.source.tileSize ?? 256,
       minzoom: basemap.source.minzoom,
       maxzoom: basemap.source.maxzoom,
@@ -1242,6 +1388,206 @@ export class BasemapControl implements IControl {
     this._managedRasters.set(basemap.id, managed);
 
     return managed;
+  }
+
+  private _addVectorOverlay(
+    basemap: BasemapDefinition,
+    overlay: VectorOverlayBasemapSource,
+  ): ManagedRasterBasemap | undefined {
+    if (!this._map) return undefined;
+
+    const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
+    const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
+    const beforeId = this._getBasemapInsertBeforeId();
+
+    const source = {
+      type: 'vector',
+      ...this._resolveVectorOverlaySource(basemap, overlay),
+      minzoom: overlay.minzoom,
+      maxzoom: overlay.maxzoom,
+      attribution: basemap.attribution,
+    } as SourceSpecification;
+
+    const layer = {
+      id: layerId,
+      type: overlay.layerType ?? 'line',
+      source: sourceId,
+      'source-layer': overlay.sourceLayer,
+      ...(overlay.layout ? { layout: overlay.layout } : {}),
+      ...(overlay.paint ? { paint: overlay.paint } : {}),
+    } as LayerSpecification;
+
+    this._map.addSource(sourceId, source);
+    this._map.addLayer(layer, beforeId);
+    const managed: ManagedRasterBasemap = { sourceId, layerId, beforeId };
+    this._managedRasters.set(basemap.id, managed);
+
+    return managed;
+  }
+
+  // Resolves the `{url}` or `{tiles}` of a vector overlay, substituting provider
+  // credentials. Mapbox vector overlays are pointed at the v4 TileJSON endpoint
+  // with the access token, reusing the same resolver as Mapbox style sources.
+  private _resolveVectorOverlaySource(
+    basemap: BasemapDefinition,
+    overlay: VectorOverlayBasemapSource,
+  ): { url: string } | { tiles: string[] } {
+    if (basemap.provider === 'mapbox') {
+      const accessToken = this._mapboxAccessToken.trim();
+      if (!accessToken) {
+        throw new MissingCredentialError(
+          'Enter a Mapbox access token before applying this overlay.',
+          'mapbox',
+        );
+      }
+      if (this._isUrlLikeCredential(accessToken)) {
+        throw new MissingCredentialError(
+          'Enter a valid Mapbox access token, not a URL.',
+          'mapbox',
+        );
+      }
+      const encoded = encodeURIComponent(accessToken);
+      if (overlay.url) {
+        return { url: this._resolveMapboxInternalUrl(overlay.url, encoded) };
+      }
+    }
+
+    if (overlay.url) return { url: overlay.url };
+    if (overlay.tiles) return { tiles: overlay.tiles };
+    throw new Error(`Vector overlay "${basemap.id}" has no url or tiles.`);
+  }
+
+  // Resolves the tile templates of a raster basemap, substituting provider
+  // credentials (and, for Google, a Map Tiles API session token). Throws a
+  // MissingCredentialError when a required key is absent so the panel can
+  // surface a "Get a ..." link and reveal the credential inputs.
+  private async _resolveRasterTiles(basemap: BasemapDefinition): Promise<string[]> {
+    if (basemap.source.type !== 'raster') return [];
+    const { tiles, googleSession } = basemap.source;
+
+    if (googleSession) {
+      return this._resolveGoogleSessionTiles(tiles, googleSession);
+    }
+
+    if (!tiles.some((tile) => tile.includes(API_KEY_PLACEHOLDER))) {
+      return tiles;
+    }
+
+    const apiKey = this._rasterApiKeyFor(basemap.provider);
+    if (!apiKey) {
+      throw this._missingRasterKeyError(basemap.provider);
+    }
+    const encoded = encodeURIComponent(apiKey);
+    return tiles.map((tile) => tile.split(API_KEY_PLACEHOLDER).join(encoded));
+  }
+
+  private _rasterApiKeyFor(provider: string): string {
+    if (provider === 'tomtom') return this._tomtomApiKey.trim();
+    if (provider === 'here') return this._hereApiKey.trim();
+    if (provider === 'google') return this._googleMapsApiKey.trim();
+    return '';
+  }
+
+  private _missingRasterKeyError(provider: string): MissingCredentialError {
+    const label =
+      provider === 'tomtom'
+        ? 'TomTom API key'
+        : provider === 'here'
+          ? 'HERE API key'
+          : provider === 'google'
+            ? 'Google Maps API key'
+            : 'API key';
+    const helpProvider = (
+      provider in PROVIDER_CREDENTIAL_HELP ? provider : 'maptiler'
+    ) as keyof typeof PROVIDER_CREDENTIAL_HELP;
+    return new MissingCredentialError(`Enter a ${label} before applying this layer.`, helpProvider);
+  }
+
+  // Resolves Google tile templates by minting (or reusing) a Map Tiles API
+  // session token, then substituting both `{session}` and `{api-key}`.
+  private async _resolveGoogleSessionTiles(
+    tiles: string[],
+    config: GoogleSessionConfig,
+  ): Promise<string[]> {
+    const apiKey = this._googleMapsApiKey.trim();
+    if (!apiKey) {
+      throw new MissingCredentialError(
+        'Enter a Google Maps API key before applying this layer.',
+        'google',
+      );
+    }
+
+    const token = await this._getGoogleSessionToken(apiKey, config);
+    const encodedKey = encodeURIComponent(apiKey);
+    const encodedSession = encodeURIComponent(token);
+    return tiles.map((tile) =>
+      tile.split('{session}').join(encodedSession).split(API_KEY_PLACEHOLDER).join(encodedKey),
+    );
+  }
+
+  private async _getGoogleSessionToken(
+    apiKey: string,
+    config: GoogleSessionConfig,
+  ): Promise<string> {
+    const cacheKey = `${apiKey}:${JSON.stringify(config)}`;
+    const cached = this._googleSessions.get(cacheKey);
+    // Treat the token as expired a minute early to avoid a tile request racing
+    // the expiry boundary.
+    if (cached && cached.expiry - 60_000 > Date.now()) {
+      return cached.token;
+    }
+
+    const response = await fetch(
+      `https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mapType: config.mapType,
+          language: config.language ?? 'en-US',
+          region: config.region ?? 'US',
+          layerTypes: config.layerTypes,
+          overlay: config.overlay,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new MissingCredentialError(
+        `Google could not create a tile session (HTTP ${response.status}). ${this._summarizeGoogleError(
+          detail,
+        )}`.trim(),
+        'google',
+      );
+    }
+
+    const data = (await response.json()) as { session?: string; expiry?: string };
+    if (!data.session) {
+      throw new MissingCredentialError(
+        'Google did not return a tile session token. Check that the Map Tiles API is enabled for your key.',
+        'google',
+      );
+    }
+
+    // `expiry` is a Unix timestamp in seconds (as a string); fall back to a
+    // conservative 1-hour lifetime if it is missing or unparsable.
+    const expirySeconds = data.expiry ? Number(data.expiry) : NaN;
+    const expiry = Number.isFinite(expirySeconds)
+      ? expirySeconds * 1000
+      : Date.now() + 60 * 60 * 1000;
+    this._googleSessions.set(cacheKey, { token: data.session, expiry });
+    return data.session;
+  }
+
+  private _summarizeGoogleError(detail: string): string {
+    if (!detail) return '';
+    try {
+      const parsed = JSON.parse(detail) as { error?: { message?: string } };
+      return parsed.error?.message ?? '';
+    } catch {
+      return detail.slice(0, 200);
+    }
   }
 
   private _waitForStyleReady(): Promise<void> {

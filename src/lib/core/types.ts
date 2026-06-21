@@ -1,6 +1,6 @@
 import type { Map } from 'maplibre-gl';
 
-export type BasemapSourceType = 'raster' | 'vector-style' | 'style';
+export type BasemapSourceType = 'raster' | 'vector-style' | 'style' | 'vector-overlay';
 
 export type BasemapControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -18,11 +18,57 @@ export interface RasterBasemapSource {
   minzoom?: number;
   maxzoom?: number;
   scheme?: 'xyz' | 'tms';
+  /**
+   * When set, the tile URLs use a Google Map Tiles API session token (the
+   * `{session}` placeholder). The control creates the session lazily via the
+   * `createSession` endpoint using the configured `googleMapsApiKey`, caches it
+   * until it expires, then substitutes the token into the tiles. Used by the
+   * Google Traffic overlay, whose tiles have no static URL.
+   */
+  googleSession?: GoogleSessionConfig;
+}
+
+/**
+ * Configuration for a Google Map Tiles API session. Mirrors the body of the
+ * `createSession` request. A traffic overlay uses `mapType: 'roadmap'`,
+ * `layerTypes: ['layerTraffic']`, and `overlay: true` so the tiles are a
+ * transparent traffic layer that can stack on top of any basemap.
+ */
+export interface GoogleSessionConfig {
+  mapType: 'roadmap' | 'satellite' | 'terrain';
+  layerTypes?: string[];
+  overlay?: boolean;
+  language?: string;
+  region?: string;
 }
 
 export interface StyleBasemapSource {
   type: 'style' | 'vector-style';
   url: string;
+}
+
+/**
+ * A vector tile overlay rendered as a single MapLibre layer on top of the
+ * active basemap. Used for traffic overlays that ship as a vector tileset
+ * (e.g. Mapbox Traffic), where a transparent raster tile is not available and
+ * the congestion is encoded as a feature property the layer paint reads.
+ */
+export interface VectorOverlayBasemapSource {
+  type: 'vector-overlay';
+  /** A `mapbox://` or TileJSON URL for the vector source. */
+  url?: string;
+  /** Explicit vector tile templates, used when `url` is omitted. */
+  tiles?: string[];
+  /** The source layer within the vector tiles to render. */
+  sourceLayer: string;
+  /** The kind of MapLibre layer used to render the overlay. Defaults to `line`. */
+  layerType?: 'line' | 'fill' | 'circle';
+  /** Paint properties applied to the rendered layer. */
+  paint?: Record<string, unknown>;
+  /** Layout properties applied to the rendered layer. */
+  layout?: Record<string, unknown>;
+  minzoom?: number;
+  maxzoom?: number;
 }
 
 export interface BasemapDefinition {
@@ -33,7 +79,7 @@ export interface BasemapDefinition {
   category?: string;
   description?: string;
   attribution?: string;
-  source: RasterBasemapSource | StyleBasemapSource;
+  source: RasterBasemapSource | StyleBasemapSource | VectorOverlayBasemapSource;
   view?: {
     center?: [number, number];
     zoom?: number;
@@ -53,6 +99,15 @@ export interface BasemapControlOptions {
   amazonApiKey?: string;
   awsRegion?: string;
   mapboxAccessToken?: string;
+  /** TomTom API key, used by the TomTom Traffic Flow overlays. */
+  tomtomApiKey?: string;
+  /** HERE API key, used by the HERE Traffic Flow overlay. */
+  hereApiKey?: string;
+  /**
+   * Google Maps Platform API key with the Map Tiles API enabled, used by the
+   * Google Traffic overlay to create a tile session and authorize tiles.
+   */
+  googleMapsApiKey?: string;
   basemaps?: BasemapDefinition[];
   providers?: BasemapProvider[];
   includeDefaultBasemaps?: boolean;

@@ -151,6 +151,45 @@ describe('basemap catalog', () => {
     );
   });
 
+  it('includes traffic overlays for TomTom, HERE, Mapbox, and Google', () => {
+    const catalog = createBasemapCatalog();
+    const byId = new Map(catalog.map((basemap) => [basemap.id, basemap]));
+
+    const tomtom = byId.get('tomtom-traffic-flow-relative');
+    expect(tomtom?.category).toBe('Traffic');
+    expect(tomtom?.source.type === 'raster' ? tomtom.source.tiles[0] : '').toBe(
+      'https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key={api-key}',
+    );
+
+    const here = byId.get('here-traffic-flow');
+    expect(here?.source.type === 'raster' ? here.source.tiles[0] : '').toBe(
+      'https://traffic.maps.hereapi.com/v3/flow/mc/{z}/{x}/{y}/png?apiKey={api-key}',
+    );
+
+    const mapbox = byId.get('mapbox-traffic');
+    expect(mapbox?.type).toBe('vector-overlay');
+    expect(mapbox?.source.type === 'vector-overlay' ? mapbox.source.url : '').toBe(
+      'mapbox://mapbox.mapbox-traffic-v1',
+    );
+    expect(mapbox?.source.type === 'vector-overlay' ? mapbox.source.sourceLayer : '').toBe(
+      'traffic',
+    );
+
+    const google = byId.get('google-traffic');
+    expect(google?.source.type === 'raster' ? google.source.googleSession?.layerTypes : []).toEqual(
+      ['layerTraffic'],
+    );
+    expect(google?.source.type === 'raster' ? google.source.googleSession?.overlay : false).toBe(
+      true,
+    );
+  });
+
+  it('lists TomTom and HERE as traffic providers', () => {
+    expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toEqual(
+      expect.arrayContaining(['tomtom', 'here']),
+    );
+  });
+
   it('deduplicates providers by id', () => {
     const providers = combineProviders(DEFAULT_BASEMAP_PROVIDERS, [
       { id: 'carto', name: 'Carto Custom' },
