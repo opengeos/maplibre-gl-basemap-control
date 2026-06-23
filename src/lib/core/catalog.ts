@@ -11,6 +11,7 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: 'maptiler', name: 'MapTiler', category: 'General' },
   { id: 'nasa-gibs', name: 'NASA GIBS', category: 'Imagery' },
   { id: 'nlmaps', name: 'nlmaps', category: 'Regional' },
+  { id: 'openbasiskaart', name: 'Openbasiskaart', category: 'Regional' },
   { id: 'openfreemap', name: 'OpenFreeMap', category: 'Vector Styles' },
   { id: 'openrailwaymap', name: 'OpenRailwayMap', category: 'Transport' },
   { id: 'openstreetmap', name: 'OpenStreetMap', category: 'Community' },
@@ -1046,6 +1047,21 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
       'https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_ortho25/EPSG:3857/{z}/{x}/{y}.jpeg',
     ],
     tags: ['netherlands', 'imagery', 'aerial'],
+  }),
+  rasterBasemap({
+    id: 'openbasiskaart',
+    name: 'Openbasiskaart',
+    provider: 'openbasiskaart',
+    category: 'Regional',
+    description: 'Netherlands topographic background map based on OpenStreetMap data.',
+    attribution: 'Map data &copy; OpenStreetMap contributors | Openbasiskaart',
+    // The Google Maps Compatible (osm-g) layer uses the standard Web Mercator
+    // grid, so its WMTS {TileMatrix}/{TileRow}/{TileCol} maps directly to xyz.
+    tiles: [
+      'https://www.openbasiskaart.nl/mapcache/wmts/1.0.0/osm-g/default/g/{z}/{y}/{x}.png',
+    ],
+    maxzoom: 18,
+    tags: ['netherlands', 'regional', 'topographic', 'osm', 'openbasiskaart'],
   }),
   {
     id: 'openfreemap-positron',
