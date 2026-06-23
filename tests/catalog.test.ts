@@ -71,6 +71,18 @@ describe('basemap catalog', () => {
     expect(ids).toContain('nlmaps-luchtfoto');
   });
 
+  it('includes the Openbasiskaart Netherlands basemap on the Web Mercator grid', () => {
+    const catalog = createBasemapCatalog();
+    const openbasiskaart = catalog.find((basemap) => basemap.id === 'openbasiskaart');
+
+    expect(openbasiskaart?.provider).toBe('openbasiskaart');
+    expect(openbasiskaart?.category).toBe('Regional');
+    expect(openbasiskaart?.source.type === 'raster' ? openbasiskaart.source.tiles[0] : '').toBe(
+      'https://www.openbasiskaart.nl/mapcache/wmts/1.0.0/osm-g/default/g/{z}/{y}/{x}.png',
+    );
+    expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toContain('openbasiskaart');
+  });
+
   it('includes OpenFreeMap vector styles', () => {
     const catalog = createBasemapCatalog();
     const ids = catalog.map((basemap) => basemap.id);
