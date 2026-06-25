@@ -114,6 +114,17 @@ interface ResizeAnchor {
 type EventHandlersMap = globalThis.Map<BasemapControlEvent, Set<BasemapControlEventHandler>>;
 type SetStyleOptions = NonNullable<Parameters<MapLibreMap['setStyle']>[1]>;
 
+// The shape of a single provider credential input, shared by the centralized
+// settings view and the inline field shown beside a missing-credential error.
+interface ProviderInputConfig {
+  className: string;
+  type: string;
+  placeholder: string;
+  ariaLabel: string;
+  value: string;
+  onInput: (value: string) => void;
+}
+
 export class BasemapControl implements IControl {
   private _map?: MapLibreMap;
   private _mapContainer?: HTMLElement;
@@ -166,11 +177,18 @@ export class BasemapControl implements IControl {
   // session on every add. Keyed by the serialized config + API key.
   private _googleSessions: globalThis.Map<string, { token: string; expiry: number }> =
     new globalThis.Map();
-  private _providerSettingsCollapsed = true;
+  // Which sub-view the panel content shows: the basemap list, or the dedicated
+  // API-keys settings view opened from the header key button (#837).
+  private _activeView: 'basemaps' | 'settings' = 'basemaps';
+  private _settingsButton?: HTMLButtonElement;
   // Provider of the most recent missing-credential error, used to pick the
-  // matching help link. Kept in sync with `_state.error` (both are set together
-  // in `_applyBasemapChange`'s catch) so it is never stale when consulted.
+  // matching help link and the inline credential field beside the error. Kept
+  // in sync with `_state.error` (both are cleared together) so it is never
+  // stale when consulted.
   private _missingCredentialProvider?: keyof typeof PROVIDER_CREDENTIAL_HELP;
+  // The basemap whose application last failed for a missing credential, so the
+  // inline credential field's Enter key can re-attempt it (#837).
+  private _lastFailedBasemapId?: string;
   private _resizeHandler: (() => void) | null = null;
   private _mapResizeHandler: (() => void) | null = null;
   private _resizeAnchor: ResizeAnchor | null = null;
@@ -312,7 +330,7 @@ export class BasemapControl implements IControl {
 
   setMapTilerApiKey(apiKey: string): void {
     this._mapTilerApiKey = apiKey;
-    this._state = { ...this._state, error: undefined };
+    this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
   }
@@ -320,28 +338,28 @@ export class BasemapControl implements IControl {
   setAmazonCredentials(apiKey: string, awsRegion = this._awsRegion): void {
     this._amazonApiKey = apiKey;
     this._awsRegion = awsRegion;
-    this._state = { ...this._state, error: undefined };
+    this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setMapboxAccessToken(accessToken: string): void {
     this._mapboxAccessToken = accessToken;
-    this._state = { ...this._state, error: undefined };
+    this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setTomTomApiKey(apiKey: string): void {
     this._tomtomApiKey = apiKey;
-    this._state = { ...this._state, error: undefined };
+    this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setHereApiKey(apiKey: string): void {
     this._hereApiKey = apiKey;
-    this._state = { ...this._state, error: undefined };
+    this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
   }
@@ -350,7 +368,7 @@ export class BasemapControl implements IControl {
     this._googleMapsApiKey = apiKey;
     // A new key invalidates any session tokens minted with the previous one.
     this._googleSessions.clear();
-    this._state = { ...this._state, error: undefined };
+    this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
   }
@@ -434,6 +452,25 @@ export class BasemapControl implements IControl {
       basemap.source.type === 'raster' || basemap.source.type === 'vector-overlay';
     const effectiveMode: 'replace' | 'add' = isOverlay ? mode : 'replace';
 
+    // Validate provider credentials for a style basemap up-front, before the
+    // destructive confirm prompt below. A style swap discards stacked rasters,
+    // so a missing key must surface the inline credential field instead of
+    // asking the user to approve clearing their basemap stack only to then hit
+    // a hard "enter an API key" error (#837). Overlays stack non-destructively
+    // and resolve their credentials lazily, so they are not pre-checked here.
+    if (!isOverlay) {
+      try {
+        this._resolveStyleUrl(basemap);
+      } catch (cause) {
+        if (cause instanceof MissingCredentialError) {
+          this._enterCredentialError(cause, basemap);
+          throw cause;
+        }
+        // Non-credential resolution errors fall through to the apply path
+        // below, which reports them with full loading/error handling.
+      }
+    }
+
     // A style basemap swaps the whole map style, discarding every stacked
     // raster overlay. In stack mode that is a destructive, easy-to-trigger
     // surprise, so give the host a chance to confirm before the rasters are
@@ -509,18 +546,16 @@ export class BasemapControl implements IControl {
       this._emit({ type: 'statechange', state: this.getState() });
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
-      this._state = { ...this._state, loading: false, error: error.message };
-      this._missingCredentialProvider =
-        cause instanceof MissingCredentialError
-          ? (cause.provider as keyof typeof PROVIDER_CREDENTIAL_HELP)
-          : undefined;
-      // Reveal the credential inputs so a missing-credential error has an
-      // obvious next step instead of dead-ending in a collapsed section.
-      if (cause instanceof MissingCredentialError) {
-        this._providerSettingsCollapsed = false;
+      if (error instanceof MissingCredentialError) {
+        // Surface the inline credential field beside the error so a missing
+        // key has an obvious next step instead of dead-ending (#837).
+        this._enterCredentialError(error, basemap);
+      } else {
+        this._state = { ...this._state, loading: false, error: error.message };
+        this._missingCredentialProvider = undefined;
+        this._renderContent(true);
+        this._handleError(error, basemap);
       }
-      this._renderContent(true);
-      this._handleError(error, basemap);
       throw error;
     }
   }
@@ -593,6 +628,34 @@ export class BasemapControl implements IControl {
     this._emit({ type: 'statechange', state: this.getState() });
   }
 
+  // Clears the current error and its associated missing-credential provider so
+  // the inline credential field and help link disappear together.
+  private _clearError(): void {
+    if (
+      this._state.error === undefined &&
+      this._missingCredentialProvider === undefined &&
+      this._lastFailedBasemapId === undefined
+    ) {
+      return;
+    }
+    this._state = { ...this._state, error: undefined };
+    this._missingCredentialProvider = undefined;
+    this._lastFailedBasemapId = undefined;
+  }
+
+  // Records a missing-credential failure: stores the error, remembers the
+  // provider (for the help link and inline field) and the basemap to retry, and
+  // surfaces the basemaps view so the inline credential field beside the error
+  // is visible (#837).
+  private _enterCredentialError(error: MissingCredentialError, basemap: BasemapDefinition): void {
+    this._state = { ...this._state, loading: false, error: error.message };
+    this._missingCredentialProvider = error.provider as keyof typeof PROVIDER_CREDENTIAL_HELP;
+    this._lastFailedBasemapId = basemap.id;
+    this._activeView = 'basemaps';
+    this._renderContent(true);
+    this._handleError(error, basemap);
+  }
+
   private _createContainer(): HTMLElement {
     const container = document.createElement('div');
     container.className = `maplibregl-ctrl maplibregl-ctrl-group basemap-control${
@@ -635,6 +698,22 @@ export class BasemapControl implements IControl {
     title.className = 'basemap-control-title';
     title.textContent = this._options.title;
 
+    // Key button: opens the dedicated API-keys settings view. Only meaningful
+    // when at least one catalog basemap needs a provider credential, so its
+    // visibility is reconciled in `_renderContent`.
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'basemap-control-settings-toggle';
+    settingsBtn.type = 'button';
+    settingsBtn.setAttribute('aria-label', 'API keys');
+    settingsBtn.title = 'API keys';
+    settingsBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+      </svg>
+    `;
+    settingsBtn.addEventListener('click', () => this._toggleSettingsView());
+    this._settingsButton = settingsBtn;
+
     const closeBtn = document.createElement('button');
     closeBtn.className = 'basemap-control-close';
     closeBtn.type = 'button';
@@ -643,6 +722,7 @@ export class BasemapControl implements IControl {
     closeBtn.addEventListener('click', () => this.collapse());
 
     header.appendChild(title);
+    header.appendChild(settingsBtn);
     header.appendChild(closeBtn);
 
     this._content = document.createElement('div');
@@ -670,6 +750,15 @@ export class BasemapControl implements IControl {
   private _renderContent(preserveResultsScroll = false): void {
     if (!this._content) return;
 
+    this._reconcileSettingsButton();
+
+    // The settings view replaces the whole content area; never show it when the
+    // catalog has no keyed providers (the button is hidden in that case too).
+    if (this._activeView === 'settings' && this._hasProviderSettings()) {
+      this._content.replaceChildren(this._createSettingsView());
+      return;
+    }
+
     const categories = getBasemapCategories(this._basemaps);
     const results = this._getFilteredBasemaps();
     const previousResultsScrollTop = preserveResultsScroll
@@ -679,7 +768,6 @@ export class BasemapControl implements IControl {
     this._content.replaceChildren(
       this._createSearchRow(),
       ...(this._options.showMultipleToggle ? [this._createMultipleToggleRow()] : []),
-      ...(this._hasProviderSettings() ? [this._createProviderSettingsSection()] : []),
       this._createFilterRow(this._providers, categories),
       this._createStatus(results.length),
       this._createResults(results),
@@ -689,6 +777,25 @@ export class BasemapControl implements IControl {
       const resultsElement = this._content.querySelector('.basemap-control-results');
       if (resultsElement) resultsElement.scrollTop = previousResultsScrollTop;
     }
+  }
+
+  // Show the key button only when the catalog actually needs a provider
+  // credential, and reflect whether the settings view is currently open.
+  private _reconcileSettingsButton(): void {
+    if (!this._settingsButton) return;
+    const hasSettings = this._hasProviderSettings();
+    this._settingsButton.hidden = !hasSettings;
+    this._settingsButton.classList.toggle(
+      'is-active',
+      hasSettings && this._activeView === 'settings',
+    );
+  }
+
+  private _toggleSettingsView(): void {
+    if (!this._hasProviderSettings()) return;
+    this._activeView = this._activeView === 'settings' ? 'basemaps' : 'settings';
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   private _renderFilteredResults(): void {
@@ -753,8 +860,20 @@ export class BasemapControl implements IControl {
     input.value = this._state.query;
     input.setAttribute('aria-label', 'Search basemaps');
     input.addEventListener('input', () => {
+      // Browsing for an alternative basemap dismisses a stale credential error
+      // so it stops obscuring the list (#837). Re-render fully (not just the
+      // results) so the error banner is removed.
+      const hadError = this._state.error !== undefined;
       this._state = { ...this._state, query: input.value };
-      this._renderFilteredResults();
+      this._clearError();
+      if (hadError) {
+        this._renderContent();
+        input.focus();
+        const end = input.value.length;
+        input.setSelectionRange?.(end, end);
+      } else {
+        this._renderFilteredResults();
+      }
       this._emit({ type: 'statechange', state: this.getState() });
     });
 
@@ -781,128 +900,229 @@ export class BasemapControl implements IControl {
     return wrapper;
   }
 
-  private _createProviderSettingsSection(): HTMLElement {
-    const details = document.createElement('details');
-    details.className = 'basemap-control-provider-settings';
-    details.open = !this._providerSettingsCollapsed;
-    details.addEventListener('toggle', () => {
-      this._providerSettingsCollapsed = !details.open;
-    });
+  // The ordered set of provider credential fields, gated by whether the catalog
+  // actually contains basemaps for each provider. A single source of truth for
+  // both the centralized settings view and the inline field shown beside a
+  // missing-credential error, so the two never drift (#837).
+  private _providerFieldDefs(): Array<{
+    provider: keyof typeof PROVIDER_CREDENTIAL_HELP;
+    label: string;
+    has: boolean;
+    fields: ProviderInputConfig[];
+  }> {
+    return [
+      {
+        provider: 'maptiler',
+        label: 'MapTiler',
+        has: this._hasMapTilerBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-maptiler-key',
+            type: 'password',
+            placeholder: 'MapTiler API key',
+            ariaLabel: 'MapTiler API key',
+            value: this._mapTilerApiKey,
+            onInput: (value) => {
+              this._mapTilerApiKey = value;
+            },
+          },
+        ],
+      },
+      {
+        provider: 'mapbox',
+        label: 'Mapbox',
+        has: this._hasMapboxBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-mapbox-token',
+            type: 'password',
+            placeholder: 'Mapbox access token',
+            ariaLabel: 'Mapbox access token',
+            value: this._mapboxAccessToken,
+            onInput: (value) => {
+              this._mapboxAccessToken = value;
+            },
+          },
+        ],
+      },
+      {
+        provider: 'tomtom',
+        label: 'TomTom',
+        has: this._hasTomTomBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-tomtom-key',
+            type: 'password',
+            placeholder: 'TomTom API key',
+            ariaLabel: 'TomTom API key',
+            value: this._tomtomApiKey,
+            onInput: (value) => {
+              this._tomtomApiKey = value;
+            },
+          },
+        ],
+      },
+      {
+        provider: 'here',
+        label: 'HERE',
+        has: this._hasHereBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-here-key',
+            type: 'password',
+            placeholder: 'HERE API key',
+            ariaLabel: 'HERE API key',
+            value: this._hereApiKey,
+            onInput: (value) => {
+              this._hereApiKey = value;
+            },
+          },
+        ],
+      },
+      {
+        provider: 'google',
+        label: 'Google',
+        has: this._hasGoogleApiKeyBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-google-key',
+            type: 'password',
+            placeholder: 'Google Maps API key',
+            ariaLabel: 'Google Maps API key',
+            value: this._googleMapsApiKey,
+            onInput: (value) => {
+              this._googleMapsApiKey = value;
+              // Changing the key invalidates cached session tokens.
+              this._googleSessions.clear();
+            },
+          },
+        ],
+      },
+      {
+        provider: 'amazon',
+        label: 'Amazon',
+        has: this._hasAmazonBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-amazon-key',
+            type: 'password',
+            placeholder: 'Amazon API key',
+            ariaLabel: 'Amazon API key',
+            value: this._amazonApiKey,
+            onInput: (value) => {
+              this._amazonApiKey = value;
+            },
+          },
+          {
+            className: 'basemap-control-aws-region',
+            type: 'text',
+            placeholder: 'AWS region',
+            ariaLabel: 'AWS region',
+            value: this._awsRegion,
+            onInput: (value) => {
+              this._awsRegion = value;
+            },
+          },
+        ],
+      },
+    ];
+  }
 
-    const summary = document.createElement('summary');
-    summary.className = 'basemap-control-provider-settings-summary';
-    summary.textContent = 'Provider settings';
-    details.appendChild(summary);
+  // The dedicated API-keys view, opened from the header key button. It collects
+  // every provider credential in one place, separate from the basemap list, so
+  // the list itself stays free of input clutter (#837, Bug 5).
+  private _createSettingsView(): HTMLElement {
+    const view = document.createElement('div');
+    view.className = 'basemap-control-settings-view';
+
+    const head = document.createElement('div');
+    head.className = 'basemap-control-settings-head';
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'basemap-control-settings-back';
+    back.setAttribute('aria-label', 'Back to basemaps');
+    back.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+      <span>Basemaps</span>
+    `;
+    back.addEventListener('click', () => this._toggleSettingsView());
+
+    const heading = document.createElement('span');
+    heading.className = 'basemap-control-settings-heading';
+    heading.textContent = 'API keys';
+
+    head.appendChild(back);
+    head.appendChild(heading);
+    view.appendChild(head);
+
+    const intro = document.createElement('p');
+    intro.className = 'basemap-control-settings-intro';
+    intro.textContent = 'Add the credentials each provider requires to use its basemaps.';
+    view.appendChild(intro);
 
     const fields = document.createElement('div');
     fields.className = 'basemap-control-provider-settings-fields';
+    for (const def of this._providerFieldDefs()) {
+      if (def.has) fields.appendChild(this._createProviderFieldGroup(def));
+    }
+    view.appendChild(fields);
 
-    if (this._hasMapTilerBasemaps()) {
-      fields.appendChild(
+    return view;
+  }
+
+  private _createProviderFieldGroup(def: {
+    provider: keyof typeof PROVIDER_CREDENTIAL_HELP;
+    label: string;
+    fields: ProviderInputConfig[];
+  }): HTMLElement {
+    const group = document.createElement('div');
+    group.className = `basemap-control-provider-group basemap-control-provider-group-${def.provider}`;
+
+    const label = document.createElement('span');
+    label.className = 'basemap-control-provider-group-label';
+    label.textContent = def.label;
+    group.appendChild(label);
+
+    for (const field of def.fields) {
+      group.appendChild(this._createProviderSettingsInput(field));
+    }
+    return group;
+  }
+
+  // Renders the credential field(s) for the provider of the active
+  // missing-credential error, inline beside the error message. Only that one
+  // provider is shown, so the user is not asked to wade through every other
+  // provider's inputs (#837, Bug 3). Returns null when no such error is active.
+  private _createInlineCredentialFields(): HTMLElement | null {
+    if (!this._state.error || !this._missingCredentialProvider) return null;
+    const def = this._providerFieldDefs().find(
+      (candidate) => candidate.provider === this._missingCredentialProvider && candidate.has,
+    );
+    if (!def) return null;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-status-fields';
+    for (const field of def.fields) {
+      wrapper.appendChild(
         this._createProviderSettingsInput({
-          className: 'basemap-control-maptiler-key',
-          type: 'password',
-          placeholder: 'MapTiler API key',
-          ariaLabel: 'MapTiler API key',
-          value: this._mapTilerApiKey,
-          onInput: (value) => {
-            this._mapTilerApiKey = value;
-          },
+          ...field,
+          // Keep the error (and this field) on screen while the user types, and
+          // let Enter re-attempt the basemap that failed, so the field is not
+          // yanked out from under the cursor on the first keystroke.
+          rerenderOnInput: false,
+          clearErrorOnInput: false,
+          onEnter: () => this._retryLastFailedBasemap(),
         }),
       );
     }
+    return wrapper;
+  }
 
-    if (this._hasMapboxBasemaps()) {
-      fields.appendChild(
-        this._createProviderSettingsInput({
-          className: 'basemap-control-mapbox-token',
-          type: 'password',
-          placeholder: 'Mapbox access token',
-          ariaLabel: 'Mapbox access token',
-          value: this._mapboxAccessToken,
-          onInput: (value) => {
-            this._mapboxAccessToken = value;
-          },
-        }),
-      );
-    }
-
-    if (this._hasTomTomBasemaps()) {
-      fields.appendChild(
-        this._createProviderSettingsInput({
-          className: 'basemap-control-tomtom-key',
-          type: 'password',
-          placeholder: 'TomTom API key',
-          ariaLabel: 'TomTom API key',
-          value: this._tomtomApiKey,
-          onInput: (value) => {
-            this._tomtomApiKey = value;
-          },
-        }),
-      );
-    }
-
-    if (this._hasHereBasemaps()) {
-      fields.appendChild(
-        this._createProviderSettingsInput({
-          className: 'basemap-control-here-key',
-          type: 'password',
-          placeholder: 'HERE API key',
-          ariaLabel: 'HERE API key',
-          value: this._hereApiKey,
-          onInput: (value) => {
-            this._hereApiKey = value;
-          },
-        }),
-      );
-    }
-
-    if (this._hasGoogleApiKeyBasemaps()) {
-      fields.appendChild(
-        this._createProviderSettingsInput({
-          className: 'basemap-control-google-key',
-          type: 'password',
-          placeholder: 'Google Maps API key',
-          ariaLabel: 'Google Maps API key',
-          value: this._googleMapsApiKey,
-          onInput: (value) => {
-            this._googleMapsApiKey = value;
-            // Changing the key invalidates cached session tokens.
-            this._googleSessions.clear();
-          },
-        }),
-      );
-    }
-
-    if (this._hasAmazonBasemaps()) {
-      fields.appendChild(
-        this._createProviderSettingsInput({
-          className: 'basemap-control-amazon-key',
-          type: 'password',
-          placeholder: 'Amazon API key',
-          ariaLabel: 'Amazon API key',
-          value: this._amazonApiKey,
-          onInput: (value) => {
-            this._amazonApiKey = value;
-          },
-        }),
-      );
-      fields.appendChild(
-        this._createProviderSettingsInput({
-          className: 'basemap-control-aws-region',
-          type: 'text',
-          placeholder: 'AWS region',
-          ariaLabel: 'AWS region',
-          value: this._awsRegion,
-          onInput: (value) => {
-            this._awsRegion = value;
-          },
-        }),
-      );
-    }
-
-    details.appendChild(fields);
-    return details;
+  private _retryLastFailedBasemap(): void {
+    if (this._lastFailedBasemapId) this._selectBasemap(this._lastFailedBasemapId);
   }
 
   private _createProviderSettingsInput({
@@ -912,13 +1132,13 @@ export class BasemapControl implements IControl {
     ariaLabel,
     value,
     onInput,
-  }: {
-    className: string;
-    type: string;
-    placeholder: string;
-    ariaLabel: string;
-    value: string;
-    onInput: (value: string) => void;
+    rerenderOnInput = true,
+    clearErrorOnInput = true,
+    onEnter,
+  }: ProviderInputConfig & {
+    rerenderOnInput?: boolean;
+    clearErrorOnInput?: boolean;
+    onEnter?: () => void;
   }): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = className;
@@ -936,10 +1156,18 @@ export class BasemapControl implements IControl {
     input.setAttribute('aria-label', ariaLabel);
     input.addEventListener('input', () => {
       onInput(input.value);
-      this._state = { ...this._state, error: undefined };
-      this._renderFilteredResults();
+      if (clearErrorOnInput) this._clearError();
+      if (rerenderOnInput) this._renderFilteredResults();
       this._emit({ type: 'statechange', state: this.getState() });
     });
+    if (onEnter) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onEnter();
+        }
+      });
+    }
 
     wrapper.appendChild(input);
     return wrapper;
@@ -955,6 +1183,8 @@ export class BasemapControl implements IControl {
         providers.map((provider) => ({ value: provider.id, label: provider.name })),
         (value) => {
           this._state = { ...this._state, providerFilter: value };
+          // Filtering to browse other basemaps clears a stale error (#837).
+          this._clearError();
           this._renderContent();
           this._emit({ type: 'statechange', state: this.getState() });
         },
@@ -967,6 +1197,7 @@ export class BasemapControl implements IControl {
         categories.map((category) => ({ value: category, label: category })),
         (value) => {
           this._state = { ...this._state, categoryFilter: value };
+          this._clearError();
           this._renderContent();
           this._emit({ type: 'statechange', state: this.getState() });
         },
@@ -1032,11 +1263,17 @@ export class BasemapControl implements IControl {
 
         const hint = document.createElement('span');
         hint.className = 'basemap-control-status-hint';
-        hint.textContent = ', then add it under Provider settings below.';
+        hint.textContent = ', then enter it below and press Enter.';
         actions.appendChild(hint);
 
         status.appendChild(actions);
       }
+
+      // Show only the failing provider's credential field, right beside the
+      // error, so the fix is one input away instead of buried among every
+      // provider's settings (#837).
+      const inlineFields = this._createInlineCredentialFields();
+      if (inlineFields) status.appendChild(inlineFields);
     } else {
       status.textContent = `${resultCount} basemap${resultCount === 1 ? '' : 's'}`;
     }

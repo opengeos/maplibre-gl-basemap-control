@@ -323,7 +323,18 @@ describe('BasemapControl', () => {
 
     controlCorner.appendChild(control.onAdd(map as never));
 
-    expect(screen.getByText('Provider settings')).toBeTruthy();
+    // The basemap list itself no longer carries credential inputs; they live in
+    // the dedicated API-keys view behind the header key button (#837).
+    expect(screen.queryByLabelText('MapTiler API key')).toBeNull();
+    const settingsToggle = document.querySelector<HTMLButtonElement>(
+      '.basemap-control-settings-toggle',
+    );
+    expect(settingsToggle).toBeTruthy();
+    expect(settingsToggle?.hidden).toBe(false);
+
+    settingsToggle?.click();
+
+    expect(screen.getByText('API keys')).toBeTruthy();
     expect(screen.getByLabelText<HTMLInputElement>('MapTiler API key').value).toBe('');
     expect(screen.getByLabelText<HTMLInputElement>('Mapbox access token').value).toBe('');
     expect(screen.getByLabelText<HTMLInputElement>('Mapbox access token').autocomplete).toBe(
@@ -331,6 +342,29 @@ describe('BasemapControl', () => {
     );
     expect(screen.getByLabelText<HTMLInputElement>('Amazon API key').value).toBe('');
     expect(screen.getByLabelText<HTMLInputElement>('AWS region').value).toBe('us-east-1');
+  });
+
+  it('hides the API-keys button when no keyed providers are available', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      basemaps: [
+        {
+          id: 'plain-style',
+          name: 'Plain Style',
+          provider: 'osm',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/style.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    const settingsToggle = document.querySelector<HTMLButtonElement>(
+      '.basemap-control-settings-toggle',
+    );
+    expect(settingsToggle?.hidden).toBe(true);
   });
 
   it('applies MapTiler styles with the configured API key', async () => {
@@ -490,12 +524,14 @@ describe('BasemapControl', () => {
     expect(link?.target).toBe('_blank');
     expect(link?.rel).toBe('noopener noreferrer');
 
-    // The Provider settings section auto-expands so the key input is visible.
-    const details = document.querySelector<HTMLDetailsElement>(
-      '.basemap-control-provider-settings',
-    );
-    expect(details?.open).toBe(true);
-    expect(screen.getByLabelText('Amazon API key')).toBeTruthy();
+    // The failing provider's credential field is shown inline beside the error
+    // so the fix is one input away (#837).
+    const inlineFields = status?.querySelector('.basemap-control-status-fields');
+    expect(inlineFields).toBeTruthy();
+    expect(inlineFields?.querySelector('[aria-label="Amazon API key"]')).toBeTruthy();
+    expect(inlineFields?.querySelector('[aria-label="AWS region"]')).toBeTruthy();
+    // Only the failing provider's fields appear, not every other provider's.
+    expect(screen.queryByLabelText('MapTiler API key')).toBeNull();
   });
 
   it('applies Mapbox styles with the configured access token', async () => {
@@ -860,6 +896,143 @@ describe('BasemapControl', () => {
     expect(map.getLayer('one')).toBeTruthy();
     expect(map.getLayer('two')).toBeTruthy();
     expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
+  });
+
+  it('validates style credentials before the destructive confirm prompt', async () => {
+    const { map, controlCorner } = createMockMap();
+    const confirmStyleReplace = vi.fn().mockResolvedValue(true);
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      allowMultiple: true,
+      confirmStyleReplace,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.addBasemap('one');
+    await control.addBasemap('two');
+
+    // The Amazon key is missing, so the missing-credential error must surface
+    // before the user is ever asked to discard their stacked rasters (#837).
+    await expect(control.setBasemap('amazon-standard')).rejects.toThrow(
+      'Enter an Amazon API key before applying this basemap.',
+    );
+    expect(confirmStyleReplace).not.toHaveBeenCalled();
+    expect(map.setStyle).not.toHaveBeenCalled();
+    expect(map.getLayer('one')).toBeTruthy();
+    expect(map.getLayer('two')).toBeTruthy();
+    expect(control.getState().activeBasemapIds).toEqual(['one', 'two']);
+  });
+
+  it('clears a stale credential error when the user searches for an alternative', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('amazon-standard')).rejects.toThrow();
+    expect(document.querySelector('.basemap-control-status.is-error')).toBeTruthy();
+
+    const search = screen.getByLabelText<HTMLInputElement>('Search basemaps');
+    fireEvent.input(search, { target: { value: 'two' } });
+
+    expect(document.querySelector('.basemap-control-status.is-error')).toBeNull();
+    expect(control.getState().error).toBeUndefined();
+  });
+
+  it('clears a stale credential error when the provider filter changes', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      basemaps: [
+        ...basemaps,
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('amazon-standard')).rejects.toThrow();
+    expect(document.querySelector('.basemap-control-status.is-error')).toBeTruthy();
+
+    const providerSelect = screen.getByLabelText<HTMLSelectElement>('Provider');
+    fireEvent.change(providerSelect, { target: { value: 'test' } });
+
+    expect(document.querySelector('.basemap-control-status.is-error')).toBeNull();
+    expect(control.getState().error).toBeUndefined();
+  });
+
+  it('retries the failed basemap from the inline credential field on Enter', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      basemaps: [
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('amazon-standard')).rejects.toThrow();
+
+    const keyInput = screen.getByLabelText<HTMLInputElement>('Amazon API key');
+    fireEvent.input(keyInput, { target: { value: 'amazon key' } });
+    // Typing the key does not yank the inline field away mid-edit.
+    expect(document.querySelector('.basemap-control-status-fields')).toBeTruthy();
+
+    fireEvent.keyDown(keyInput, { key: 'Enter' });
+    await flushAsync();
+
+    expect(map.setStyle).toHaveBeenCalledWith(
+      'https://maps.geo.us-east-1.amazonaws.com/v2/styles/Standard/descriptor?key=amazon%20key',
+    );
+    expect(document.querySelector('.basemap-control-status.is-error')).toBeNull();
   });
 
   it('replaces the active raster when allowMultiple is disabled (default)', async () => {
