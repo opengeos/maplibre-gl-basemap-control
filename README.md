@@ -141,8 +141,10 @@ Mapbox styles include Streets, Outdoors, Light, Dark, Satellite, Satellite Stree
 and Navigation Night.
 
 MapTiler and Amazon Location styles require API keys. Mapbox styles require an access token. Users
-can enter keys and tokens in the collapsible provider settings section in the control panel, or you
-can provide them when creating the control.
+can enter keys and tokens in the dedicated API keys view, opened from the key button in the panel
+header, or you can provide them when creating the control. When a basemap is selected before its key
+is set, the control surfaces the error and the matching credential field inline, before any
+destructive style change, so the missing key can be entered and the basemap retried with Enter.
 
 ```typescript
 const control = new BasemapControl({

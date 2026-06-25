@@ -107,6 +107,40 @@
   color: #111827;
 }
 
+.basemap-control-settings-toggle {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.basemap-control-settings-toggle[hidden] {
+  display: none;
+}
+
+.basemap-control-settings-toggle:hover {
+  color: #111827;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.basemap-control-settings-toggle.is-active {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.basemap-control-settings-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .basemap-control-close {
   width: 22px;
   height: 22px;
@@ -173,25 +207,76 @@
   flex: 1 1 auto;
 }
 
-.basemap-control-provider-settings {
-  border: 1px solid #e5e7eb;
+.basemap-control-settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.basemap-control-settings-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.basemap-control-settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px 3px 5px;
+  border: 1px solid #d1d5db;
   border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.basemap-control-settings-back:hover {
+  border-color: #9ca3af;
   background: #f9fafb;
 }
 
-.basemap-control-provider-settings-summary {
-  padding: 7px 9px;
-  color: #374151;
-  cursor: pointer;
-  font-size: 12px;
+.basemap-control-settings-back:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.basemap-control-settings-heading {
+  font-size: 13px;
   font-weight: 650;
+  color: #111827;
+}
+
+.basemap-control-settings-intro {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .basemap-control-provider-settings-fields {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
-  padding: 0 8px 8px;
+  gap: 12px;
+}
+
+.basemap-control-provider-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.basemap-control-provider-group-label {
+  color: #374151;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .basemap-control-input,
@@ -236,6 +321,7 @@
 }
 
 .basemap-control-status {
+  flex: 0 0 auto;
   min-height: 17px;
   color: #6b7280;
   font-size: 12px;
@@ -245,13 +331,26 @@
   color: #b91c1c;
 }
 
+/* The error message wraps freely so the full text is always readable, never
+   clipped to a single fixed-height line (#837). `overflow-wrap: anywhere`
+   keeps long unbroken strings (encoded keys/URLs) from forcing an overflow. */
 .basemap-control-status-message {
   display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .basemap-control-status-actions {
   display: block;
   margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.basemap-control-status-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .basemap-control-status-link {
