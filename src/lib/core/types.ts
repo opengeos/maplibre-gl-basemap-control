@@ -197,6 +197,23 @@ export interface BasemapChangeEvent {
   basemap: BasemapDefinition;
   managedRaster?: ManagedRasterBasemap;
   /**
+   * The fully resolved style URL the control applied to the map for a
+   * style/vector-style basemap, with provider placeholders (`{api-key}`,
+   * `{aws-region}`, `{access_token}`, ...) already substituted. Absent for
+   * raster/overlay basemaps, which expose `managedRaster` instead. Hosts that
+   * manage the map style themselves should apply this rather than
+   * `basemap.source.url`, which still contains the raw, unsubstituted template.
+   */
+  resolvedStyleUrl?: string;
+  /**
+   * `true` when this event is the automatic rollback to the previously active
+   * basemap after a newer basemap failed to load (see the `error` event that
+   * accompanies it), rather than a user-driven selection. Hosts that track the
+   * applied basemap can use this to avoid treating the rollback as a fresh
+   * change. Absent (falsy) for ordinary selections.
+   */
+  restored?: boolean;
+  /**
    * How the basemap was applied. `'replace'` swapped out any previously active
    * basemaps; `'add'` stacked this raster basemap on top of the existing ones
    * (only emitted when `allowMultiple` is enabled). Defaults to `'replace'`.

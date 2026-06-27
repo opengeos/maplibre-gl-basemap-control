@@ -47,10 +47,31 @@ function createMockMap() {
     { id: 'overlay', type: 'circle' },
   ];
 
+  // Minimal event-emitter so the control's `on`/`once`/`off` listeners (e.g. the
+  // style-load watcher) can be exercised. `fire` dispatches an event and, for
+  // `once`, detaches the listener afterward.
+  const listeners = new Map<string, Set<{ fn: (event?: unknown) => void; once: boolean }>>();
+  const addListener = (type: string, fn: (event?: unknown) => void, once: boolean) => {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type)!.add({ fn, once });
+  };
+  const fire = (type: string, event?: unknown) => {
+    for (const entry of [...(listeners.get(type) ?? [])]) {
+      if (entry.once) listeners.get(type)!.delete(entry);
+      entry.fn(event);
+    }
+  };
+
   const map = {
     getContainer: vi.fn(() => mapContainer),
-    on: vi.fn(),
-    off: vi.fn(),
+    on: vi.fn((type: string, fn: (event?: unknown) => void) => addListener(type, fn, false)),
+    once: vi.fn((type: string, fn: (event?: unknown) => void) => addListener(type, fn, true)),
+    off: vi.fn((type: string, fn: (event?: unknown) => void) => {
+      for (const entry of [...(listeners.get(type) ?? [])]) {
+        if (entry.fn === fn) listeners.get(type)!.delete(entry);
+      }
+    }),
+    fire,
     addSource: vi.fn((id: string) => {
       sources.add(id);
     }),
@@ -1033,6 +1054,207 @@ describe('BasemapControl', () => {
       'https://maps.geo.us-east-1.amazonaws.com/v2/styles/Standard/descriptor?key=amazon%20key',
     );
     expect(document.querySelector('.basemap-control-status.is-error')).toBeNull();
+  });
+
+  it('emits the resolved style URL for a provider style basemap', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      amazonApiKey: 'secret-key',
+      awsRegion: 'us-west-2',
+      basemaps: [
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+    const handler = vi.fn();
+    control.on('basemapchange', handler);
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('amazon-standard');
+
+    const resolved =
+      'https://maps.geo.us-west-2.amazonaws.com/v2/styles/Standard/descriptor?key=secret-key';
+    expect(map.setStyle).toHaveBeenCalledWith(resolved);
+    // The event carries the fully substituted URL, not the raw template, so a
+    // host that manages the map style itself applies the same URL the control
+    // did rather than one still containing `{api-key}`/`{aws-region}`.
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'basemapchange', resolvedStyleUrl: resolved }),
+    );
+  });
+
+  it('restores the previous basemap and reports an error when a style fails to load', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      amazonApiKey: 'bad-key',
+      basemaps: [
+        {
+          id: 'base-style',
+          name: 'Base Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/base.json' },
+        },
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+    const changeHandler = vi.fn();
+    const errorHandler = vi.fn();
+    control.on('basemapchange', changeHandler);
+    control.on('error', errorHandler);
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('base-style');
+    await control.setBasemap('amazon-standard');
+    expect(control.getActiveBasemap()?.id).toBe('amazon-standard');
+
+    const amazonUrl =
+      'https://maps.geo.us-east-1.amazonaws.com/v2/styles/Standard/descriptor?key=bad-key';
+    // Simulate MapLibre reporting the descriptor request failing (HTTP 403).
+    map.fire('error', { error: { url: amazonUrl, status: 403 } });
+
+    // Rolled back to the working basemap and reapplied its style.
+    expect(control.getActiveBasemap()?.id).toBe('base-style');
+    expect(map.setStyle).toHaveBeenLastCalledWith('https://example.com/base.json');
+    // The failure is surfaced inline and through the error event.
+    expect(control.getState().error).toContain('Amazon Standard');
+    expect(control.getState().error).toContain('403');
+    expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    expect(document.querySelector('.basemap-control-status.is-error')).toBeTruthy();
+    // A basemapchange was emitted for the restored basemap so a host store can
+    // follow the rollback, flagged `restored` so the host can tell it apart from
+    // a user selection.
+    expect(changeHandler).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'basemapchange',
+        basemap: expect.objectContaining({ id: 'base-style' }),
+        restored: true,
+      }),
+    );
+  });
+
+  it('rolls back a credentialed provider basemap when its tiles are unauthorized', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      amazonApiKey: 'bad-key',
+      basemaps: [
+        {
+          id: 'base-style',
+          name: 'Base Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/base.json' },
+        },
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('base-style');
+    await control.setBasemap('amazon-standard');
+
+    // The descriptor loaded fine, but the provider 403s the tiles for a bad key
+    // (a different URL from the style document).
+    map.fire('error', {
+      error: {
+        url: 'https://maps.geo.us-east-1.amazonaws.com/v2/tiles/vector.basemap/0/0/0?key=bad-key',
+        status: 403,
+      },
+    });
+
+    expect(control.getActiveBasemap()?.id).toBe('base-style');
+    expect(control.getState().error).toContain('Amazon Standard');
+    expect(control.getState().error).toContain('403');
+  });
+
+  it('ignores non-auth resource errors on a style that loaded', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      amazonApiKey: 'good-key',
+      basemaps: [
+        {
+          id: 'amazon-standard',
+          name: 'Amazon Standard',
+          provider: 'amazon',
+          type: 'style',
+          source: {
+            type: 'style',
+            url: 'https://maps.geo.{aws-region}.amazonaws.com/v2/styles/Standard/descriptor?key={api-key}',
+          },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('amazon-standard');
+
+    // A single missing tile (404, not an auth failure) must not roll back a
+    // basemap whose credentials are accepted.
+    map.fire('error', { error: { url: 'https://example.com/tiles/1/2/3.png', status: 404 } });
+
+    expect(control.getActiveBasemap()?.id).toBe('amazon-standard');
+    expect(control.getState().error).toBeUndefined();
+  });
+
+  it('does not roll back a keyless style basemap on a transient tile error', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      includeDefaultBasemaps: false,
+      collapsed: false,
+      basemaps: [
+        {
+          id: 'base-style',
+          name: 'Base Style',
+          provider: 'test',
+          type: 'style',
+          source: { type: 'style', url: 'https://example.com/base.json' },
+        },
+      ],
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('base-style');
+
+    // A keyless provider is not subject to the credential heuristic, so even a
+    // 403 on an unrelated resource leaves it active.
+    map.fire('error', { error: { url: 'https://example.com/tiles/9/9/9.png', status: 403 } });
+
+    expect(control.getActiveBasemap()?.id).toBe('base-style');
+    expect(control.getState().error).toBeUndefined();
   });
 
   it('replaces the active raster when allowMultiple is disabled (default)', async () => {

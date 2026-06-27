@@ -87,6 +87,12 @@ const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
   },
 };
 
+// How long after a credentialed provider's style descriptor loads the control
+// keeps watching for an unauthorized (401/403) tile request before considering
+// the basemap healthy. The first tiles are fetched immediately once the style
+// is live, so this only needs to cover that initial burst.
+const STYLE_AUTH_GRACE_MS = 2500;
+
 const MIN_PANEL_WIDTH = 240;
 const MIN_PANEL_HEIGHT = 200;
 const PANEL_VIEWPORT_MARGIN = 12;
@@ -102,6 +108,43 @@ class MissingCredentialError extends Error {
     this.name = 'MissingCredentialError';
     this.provider = provider;
   }
+}
+
+// Thrown when a style basemap's descriptor request fails *after* it was applied
+// (e.g. an invalid provider API key returns 401/403, or the host is
+// unreachable). Carries the provider and the HTTP status, when known, so hosts
+// can surface a precise message. Unlike MissingCredentialError this is reported
+// asynchronously, once MapLibre reports the failed style request.
+class BasemapLoadError extends Error {
+  readonly provider: string;
+  readonly status?: number;
+
+  constructor(message: string, provider: string, status?: number) {
+    super(message);
+    this.name = 'BasemapLoadError';
+    this.provider = provider;
+    this.status = status;
+  }
+}
+
+// MapLibre reports failed network requests (including a style descriptor that
+// 401/403s) as `error` events whose `error` is an AJAXError carrying the
+// request URL. Pull it out defensively so a style-load failure can be matched
+// to the exact style URL the control applied.
+function extractErrorUrl(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'url' in error) {
+    const url = (error as { url?: unknown }).url;
+    if (typeof url === 'string') return url;
+  }
+  return undefined;
+}
+
+function extractErrorStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === 'number' && status > 0) return status;
+  }
+  return undefined;
 }
 
 interface ResizeAnchor {
@@ -189,6 +232,10 @@ export class BasemapControl implements IControl {
   // The basemap whose application last failed for a missing credential, so the
   // inline credential field's Enter key can re-attempt it (#837).
   private _lastFailedBasemapId?: string;
+  // Detaches the listeners watching the in-flight style load (see
+  // _watchStyleLoad). Set while a style swap is settling, cleared once it
+  // succeeds, fails, or is superseded by a newer swap.
+  private _cancelStyleWatch?: () => void;
   private _resizeHandler: (() => void) | null = null;
   private _mapResizeHandler: (() => void) | null = null;
   private _resizeAnchor: ResizeAnchor | null = null;
@@ -263,6 +310,9 @@ export class BasemapControl implements IControl {
     window.removeEventListener('pointermove', this._onResizeMove);
     window.removeEventListener('pointerup', this._onResizeEnd);
     window.removeEventListener('pointercancel', this._onResizeEnd);
+    // Detach any in-flight style-load watcher before the map reference is
+    // dropped so its listeners cannot fire after removal.
+    this._cancelStyleWatch?.();
     this._resizeAnchor = null;
     this._resizeHandleEl = null;
     this._panel?.parentNode?.removeChild(this._panel);
@@ -496,8 +546,13 @@ export class BasemapControl implements IControl {
     this._renderContent(true);
     this._emit({ type: 'statechange', state: this.getState() });
 
+    // The basemap that was active before this swap, captured before the state
+    // update below so a failed style load can roll back to it.
+    const previousActiveBasemapId = this._state.activeBasemapId;
+
     try {
       let managedRaster: ManagedRasterBasemap | undefined;
+      let resolvedStyleUrl: string | undefined;
       if (isOverlay) {
         await this._waitForStyleReady();
         if (effectiveMode === 'replace') {
@@ -510,6 +565,7 @@ export class BasemapControl implements IControl {
         managedRaster = await this._addOverlay(basemap);
       } else {
         const styleUrl = this._resolveStyleUrl(basemap);
+        resolvedStyleUrl = styleUrl;
         const styleOptions = this._getStyleOptions(basemap);
         // A full style swap discards every managed raster overlay, so forget
         // the ones we were tracking.
@@ -519,6 +575,12 @@ export class BasemapControl implements IControl {
         } else {
           this._map.setStyle(styleUrl);
         }
+        // setStyle fetches the descriptor asynchronously. If that request fails
+        // (e.g. an invalid provider API key returns 401/403) MapLibre is left
+        // without a style and the map goes blank. Watch the load so the
+        // previous basemap is restored and the failure reported, instead of
+        // silently clearing the map.
+        this._watchStyleLoad(styleUrl, basemap, previousActiveBasemapId);
       }
 
       this._applyBasemapView(basemap);
@@ -541,6 +603,7 @@ export class BasemapControl implements IControl {
         state: this.getState(),
         basemap,
         managedRaster,
+        resolvedStyleUrl,
         mode: effectiveMode,
       });
       this._emit({ type: 'statechange', state: this.getState() });
@@ -557,6 +620,181 @@ export class BasemapControl implements IControl {
         this._handleError(error, basemap);
       }
       throw error;
+    }
+  }
+
+  // Watches the asynchronous style load that `setStyle` kicked off for a style
+  // basemap, and rolls back to the previous basemap (reporting the failure
+  // through the `error` event) when the new style cannot actually render. Two
+  // failure modes are caught so a broken provider basemap never leaves a blank
+  // map:
+  //
+  //   1. The style *document* request fails outright (matched by URL), e.g. an
+  //      unreachable host or a descriptor that 404s. Detected whether or not
+  //      `style.load` ever fires.
+  //   2. The descriptor loads but the provider rejects the credentials when the
+  //      first tiles are fetched (401/403). Amazon Location, for instance,
+  //      serves the style JSON publicly but 403s every tile for a bad API key,
+  //      so the descriptor "loads" while the map stays empty. This is only
+  //      treated as fatal for credentialed providers, and only briefly after
+  //      the descriptor loads, so an isolated transient tile error on a healthy
+  //      basemap is ignored.
+  private _watchStyleLoad(
+    styleUrl: string,
+    basemap: BasemapDefinition,
+    previousActiveBasemapId: string | undefined,
+  ): void {
+    const map = this._map;
+    if (!map) return;
+
+    // Supersede any still-pending watcher from a faster previous switch so its
+    // listeners cannot fire against this newer style.
+    this._cancelStyleWatch?.();
+
+    const isCredentialed = basemap.provider in PROVIDER_CREDENTIAL_HELP;
+    let settled = false;
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      if (graceTimer !== undefined) clearTimeout(graceTimer);
+      map.off('style.load', onLoad);
+      map.off('error', onError);
+      if (this._cancelStyleWatch === cleanup) this._cancelStyleWatch = undefined;
+    };
+
+    const fail = (cause: unknown) => {
+      cleanup();
+      this._handleStyleLoadFailure(basemap, previousActiveBasemapId, cause);
+    };
+
+    const onLoad = () => {
+      // The descriptor loaded. For a keyless style that is success. For a
+      // credentialed provider keep listening briefly so the first unauthorized
+      // tile request (which only happens once the style is live) can still roll
+      // back a credential-rejected basemap.
+      if (!isCredentialed) {
+        cleanup();
+      } else if (graceTimer === undefined) {
+        graceTimer = setTimeout(cleanup, STYLE_AUTH_GRACE_MS);
+      }
+    };
+
+    const onError = (event: { error?: unknown }) => {
+      const error = event?.error;
+      // The style document itself failed to load.
+      if (extractErrorUrl(error) === styleUrl) {
+        fail(error);
+        return;
+      }
+      // A provider rejecting the just-applied style's resources (401/403) means
+      // the basemap cannot render; the URL match above already handled a failed
+      // descriptor, so this catches unauthorized tiles/sprites/glyphs.
+      if (isCredentialed) {
+        const status = extractErrorStatus(error);
+        if (status === 401 || status === 403) fail(error);
+      }
+    };
+
+    this._cancelStyleWatch = cleanup;
+    map.once('style.load', onLoad);
+    map.on('error', onError);
+  }
+
+  // Rolls back a failed style swap: restores the previously active basemap (when
+  // it is a style basemap the control owns), then reports the failure inline and
+  // through the `error` event. When the failing provider needs an API key, the
+  // inline credential field is revealed so the user can correct the key and
+  // retry without losing their map.
+  private _handleStyleLoadFailure(
+    failedBasemap: BasemapDefinition,
+    previousActiveBasemapId: string | undefined,
+    cause: unknown,
+  ): void {
+    this._restorePreviousBasemap(previousActiveBasemapId, failedBasemap.id);
+
+    const status = extractErrorStatus(cause);
+    const credentialProvider =
+      failedBasemap.provider in PROVIDER_CREDENTIAL_HELP
+        ? (failedBasemap.provider as keyof typeof PROVIDER_CREDENTIAL_HELP)
+        : undefined;
+    const hint = credentialProvider
+      ? ' Check the API key and try again.'
+      : ' Check your connection and try again.';
+    const error = new BasemapLoadError(
+      `Could not load the "${failedBasemap.name}" basemap${status ? ` (HTTP ${status})` : ''}.${hint}`,
+      failedBasemap.provider,
+      status,
+    );
+
+    this._state = { ...this._state, loading: false, error: error.message };
+    this._missingCredentialProvider = credentialProvider;
+    // Only offer an inline retry for a credentialed provider, where re-entering
+    // the key and pressing Enter can reasonably succeed.
+    this._lastFailedBasemapId = credentialProvider ? failedBasemap.id : undefined;
+    this._activeView = 'basemaps';
+    this._renderContent(true);
+    this._handleError(error, failedBasemap);
+  }
+
+  // Reapplies the previously active style basemap after a failed swap. Only a
+  // control-owned style/vector-style basemap can be reapplied; when the previous
+  // basemap is unknown, a raster overlay, or a style the host owns, the panel
+  // state is pointed back at it (so the failed basemap is not highlighted) and
+  // the host is left to restore its own style from the emitted `error` event.
+  private _restorePreviousBasemap(
+    previousActiveBasemapId: string | undefined,
+    failedBasemapId: string,
+  ): void {
+    const map = this._map;
+    const previous =
+      previousActiveBasemapId && previousActiveBasemapId !== failedBasemapId
+        ? this._basemaps.find((candidate) => candidate.id === previousActiveBasemapId)
+        : undefined;
+
+    const pointStateAtPrevious = () => {
+      this._state = {
+        ...this._state,
+        activeBasemapId: previousActiveBasemapId,
+        activeBasemapIds: previousActiveBasemapId ? [previousActiveBasemapId] : [],
+      };
+    };
+
+    if (
+      !map ||
+      !previous ||
+      (previous.source.type !== 'style' && previous.source.type !== 'vector-style')
+    ) {
+      pointStateAtPrevious();
+      return;
+    }
+
+    try {
+      const styleUrl = this._resolveStyleUrl(previous);
+      const styleOptions = this._getStyleOptions(previous);
+      this._removeManagedBasemap();
+      if (styleOptions) {
+        map.setStyle(styleUrl, styleOptions);
+      } else {
+        map.setStyle(styleUrl);
+      }
+      this._state = {
+        ...this._state,
+        activeBasemapId: previous.id,
+        activeBasemapIds: [previous.id],
+      };
+      this._emit({
+        type: 'basemapchange',
+        state: this.getState(),
+        basemap: previous,
+        resolvedStyleUrl: styleUrl,
+        restored: true,
+        mode: 'replace',
+      });
+    } catch {
+      // If even the restore fails (e.g. the previous basemap now needs a key),
+      // leave the panel pointing at the previous id rather than the broken one.
+      pointStateAtPrevious();
     }
   }
 
