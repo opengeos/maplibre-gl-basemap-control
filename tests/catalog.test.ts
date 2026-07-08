@@ -110,6 +110,26 @@ describe("basemap catalog", () => {
       "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg",
     );
     expect(s2cloudless?.attribution).toContain("EOX IT Services GmbH");
+    expect(s2cloudless?.attribution).toContain("Copernicus Sentinel data 2025");
+
+    // EOX publishes annual Sentinel-2 cloudless mosaics; the catalog should
+    // expose one entry per year from 2018 through 2025.
+    for (let year = 2018; year <= 2025; year += 1) {
+      const yearly = catalog.find(
+        (basemap) => basemap.id === `eox-s2cloudless-${year}`,
+      );
+      expect(yearly, `missing eox-s2cloudless-${year}`).toBeDefined();
+      expect(yearly?.provider).toBe("eox");
+      expect(yearly?.name).toBe(`EOX Sentinel-2 cloudless ${year}`);
+      expect(
+        yearly?.source.type === "raster" ? yearly.source.tiles[0] : "",
+      ).toBe(
+        `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-${year}_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg`,
+      );
+      expect(yearly?.attribution).toContain(
+        `Copernicus Sentinel data ${year}`,
+      );
+    }
 
     expect(terrainLight?.provider).toBe("eox");
     expect(terrainLight?.category).toBe("Terrain");

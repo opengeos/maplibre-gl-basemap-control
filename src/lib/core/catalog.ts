@@ -186,8 +186,38 @@ const OPENFREEMAP_ATTRIBUTION =
 const TOMTOM_ATTRIBUTION = "&copy; TomTom";
 const HERE_ATTRIBUTION = "&copy; HERE";
 const GOOGLE_ATTRIBUTION = "&copy; Google";
-const EOX_S2CLOUDLESS_ATTRIBUTION =
-  'Sentinel-2 cloudless <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2025)';
+const eoxS2CloudlessAttribution = (year: number): string =>
+  `Sentinel-2 cloudless <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data ${year})`;
+// Annual EOX Sentinel-2 cloudless mosaics published as WMTS layers
+// (s2cloudless-<year>_3857). EOX offers yearly mosaics from 2017 onward; the
+// catalog exposes one basemap per year so users can pick a specific vintage.
+const EOX_S2CLOUDLESS_YEARS = [
+  2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025,
+] as const;
+
+function eoxS2CloudlessBasemap(year: number): BasemapDefinition {
+  return rasterBasemap({
+    id: `eox-s2cloudless-${year}`,
+    name: `EOX Sentinel-2 cloudless ${year}`,
+    provider: "eox",
+    category: "Imagery",
+    description: `Cloudless Sentinel-2 satellite mosaic for ${year} (non-commercial use).`,
+    attribution: eoxS2CloudlessAttribution(year),
+    tiles: [
+      `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-${year}_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg`,
+    ],
+    maxzoom: 16,
+    tags: [
+      "eox",
+      "sentinel",
+      "satellite",
+      "imagery",
+      "cloudless",
+      "copernicus",
+      String(year),
+    ],
+  });
+}
 const EOX_TERRAIN_LIGHT_ATTRIBUTION =
   'Terrain Light <a href="https://maps.eox.at" target="_blank" rel="noopener">EOX</a> (Data &copy; OpenStreetMap contributors and others, Rendering &copy; EOX)';
 
@@ -792,27 +822,7 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     ],
     tags: ["esri", "terrain"],
   }),
-  rasterBasemap({
-    id: "eox-s2cloudless-2025",
-    name: "EOX Sentinel-2 cloudless 2025",
-    provider: "eox",
-    category: "Imagery",
-    description:
-      "Cloudless Sentinel-2 satellite mosaic for 2025 (non-commercial use).",
-    attribution: EOX_S2CLOUDLESS_ATTRIBUTION,
-    tiles: [
-      "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg",
-    ],
-    maxzoom: 16,
-    tags: [
-      "eox",
-      "sentinel",
-      "satellite",
-      "imagery",
-      "cloudless",
-      "copernicus",
-    ],
-  }),
+  ...EOX_S2CLOUDLESS_YEARS.map(eoxS2CloudlessBasemap),
   rasterBasemap({
     id: "eox-terrain-light",
     name: "EOX Terrain Light",
