@@ -138,6 +138,33 @@ describe("basemap catalog", () => {
     );
   });
 
+  it("includes the EOX terrain and overlay reference layers", () => {
+    const catalog = createBasemapCatalog();
+    const tileUrl = (id: string): string => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe("eox");
+      return basemap?.source.type === "raster" ? basemap.source.tiles[0] : "";
+    };
+
+    expect(tileUrl("eox-terrain")).toBe(
+      "https://tiles.maps.eox.at/wmts/1.0.0/terrain_3857/default/g/{z}/{y}/{x}.jpg",
+    );
+    expect(catalog.find((b) => b.id === "eox-terrain")?.category).toBe(
+      "Terrain",
+    );
+
+    expect(tileUrl("eox-overlay")).toBe(
+      "https://tiles.maps.eox.at/wmts/1.0.0/overlay_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.png",
+    );
+    expect(tileUrl("eox-overlay-bright")).toBe(
+      "https://tiles.maps.eox.at/wmts/1.0.0/overlay_bright_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.png",
+    );
+    for (const id of ["eox-overlay", "eox-overlay-bright"]) {
+      expect(catalog.find((b) => b.id === id)?.category).toBe("Labels");
+    }
+  });
+
   it("includes OpenFreeMap vector styles", () => {
     const catalog = createBasemapCatalog();
     const ids = catalog.map((basemap) => basemap.id);

@@ -220,6 +220,10 @@ function eoxS2CloudlessBasemap(year: number): BasemapDefinition {
 }
 const EOX_TERRAIN_LIGHT_ATTRIBUTION =
   'Terrain Light <a href="https://maps.eox.at" target="_blank" rel="noopener">EOX</a> (Data &copy; OpenStreetMap contributors and others, Rendering &copy; EOX)';
+const EOX_TERRAIN_ATTRIBUTION =
+  'Terrain <a href="https://maps.eox.at" target="_blank" rel="noopener">EOX</a> (Data &copy; OpenStreetMap contributors and others, Rendering &copy; EOX)';
+const EOX_OVERLAY_ATTRIBUTION =
+  'Overlay <a href="https://maps.eox.at" target="_blank" rel="noopener">EOX</a> (Data &copy; OpenStreetMap contributors and others, Rendering &copy; EOX)';
 
 // Congestion color ramp shared by the Mapbox Traffic vector overlay. Mapbox
 // Traffic v1 encodes each road segment's level in a `congestion` property, so a
@@ -835,6 +839,50 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     ],
     maxzoom: 14,
     tags: ["eox", "terrain", "light", "hillshade"],
+  }),
+  rasterBasemap({
+    id: "eox-terrain",
+    name: "EOX Terrain",
+    provider: "eox",
+    category: "Terrain",
+    description:
+      "Natural-like terrain basemap from EOX Maps (non-commercial use).",
+    attribution: EOX_TERRAIN_ATTRIBUTION,
+    // terrain_3857 is only published on EOX's "g" tile matrix set, which is the
+    // Web Mercator (GoogleMapsCompatible) grid under a different identifier.
+    tiles: [
+      "https://tiles.maps.eox.at/wmts/1.0.0/terrain_3857/default/g/{z}/{y}/{x}.jpg",
+    ],
+    maxzoom: 14,
+    tags: ["eox", "terrain", "hillshade"],
+  }),
+  rasterBasemap({
+    id: "eox-overlay",
+    name: "EOX Overlay",
+    provider: "eox",
+    category: "Labels",
+    description:
+      "Transparent overlay with borders and points of interest from EOX Maps (non-commercial use).",
+    attribution: EOX_OVERLAY_ATTRIBUTION,
+    tiles: [
+      "https://tiles.maps.eox.at/wmts/1.0.0/overlay_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.png",
+    ],
+    maxzoom: 14,
+    tags: ["eox", "overlay", "labels", "borders", "reference"],
+  }),
+  rasterBasemap({
+    id: "eox-overlay-bright",
+    name: "EOX Overlay Bright",
+    provider: "eox",
+    category: "Labels",
+    description:
+      "Bright transparent overlay with borders and points of interest from EOX Maps (non-commercial use).",
+    attribution: EOX_OVERLAY_ATTRIBUTION,
+    tiles: [
+      "https://tiles.maps.eox.at/wmts/1.0.0/overlay_bright_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.png",
+    ],
+    maxzoom: 14,
+    tags: ["eox", "overlay", "labels", "borders", "reference", "bright"],
   }),
   rasterBasemap({
     id: "nasa-gibs-blue-marble",
