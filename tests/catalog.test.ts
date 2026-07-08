@@ -110,12 +110,59 @@ describe("basemap catalog", () => {
       "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg",
     );
     expect(s2cloudless?.attribution).toContain("EOX IT Services GmbH");
+    expect(s2cloudless?.attribution).toContain("Copernicus Sentinel data 2025");
+
+    // EOX publishes annual Sentinel-2 cloudless mosaics; the catalog should
+    // expose one entry per year from 2018 through 2025.
+    for (let year = 2018; year <= 2025; year += 1) {
+      const yearly = catalog.find(
+        (basemap) => basemap.id === `eox-s2cloudless-${year}`,
+      );
+      expect(yearly, `missing eox-s2cloudless-${year}`).toBeDefined();
+      expect(yearly?.provider).toBe("eox");
+      expect(yearly?.name).toBe(`EOX Sentinel-2 cloudless ${year}`);
+      expect(
+        yearly?.source.type === "raster" ? yearly.source.tiles[0] : "",
+      ).toBe(
+        `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-${year}_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg`,
+      );
+      expect(yearly?.attribution).toContain(
+        `Copernicus Sentinel data ${year}`,
+      );
+    }
 
     expect(terrainLight?.provider).toBe("eox");
     expect(terrainLight?.category).toBe("Terrain");
     expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toContain(
       "eox",
     );
+  });
+
+  it("includes the EOX terrain and overlay reference layers", () => {
+    const catalog = createBasemapCatalog();
+    const tileUrl = (id: string): string => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe("eox");
+      return basemap?.source.type === "raster" ? basemap.source.tiles[0] : "";
+    };
+
+    expect(tileUrl("eox-terrain")).toBe(
+      "https://tiles.maps.eox.at/wmts/1.0.0/terrain_3857/default/g/{z}/{y}/{x}.jpg",
+    );
+    expect(catalog.find((b) => b.id === "eox-terrain")?.category).toBe(
+      "Terrain",
+    );
+
+    expect(tileUrl("eox-overlay")).toBe(
+      "https://tiles.maps.eox.at/wmts/1.0.0/overlay_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.png",
+    );
+    expect(tileUrl("eox-overlay-bright")).toBe(
+      "https://tiles.maps.eox.at/wmts/1.0.0/overlay_bright_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.png",
+    );
+    for (const id of ["eox-overlay", "eox-overlay-bright"]) {
+      expect(catalog.find((b) => b.id === id)?.category).toBe("Labels");
+    }
   });
 
   it("includes OpenFreeMap vector styles", () => {
