@@ -1657,4 +1657,80 @@ describe('BasemapControl traffic overlays', () => {
       'https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=sess-hybrid&key=g-secret',
     );
   });
+
+  it('offers an optional key input after a base Google basemap falls back to public tiles', async () => {
+    const { map, controlCorner } = createMockMap();
+    globalThis.fetch = vi.fn() as never;
+
+    const control = new BasemapControl({ collapsed: false, allowMultiple: true });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('google-satellite');
+
+    // The public fallback tiles are applied, and the optional key prompt shows
+    // an API key input the user can fill in to upgrade.
+    expect(lastSourceFor(map, 'google-satellite')?.tiles?.[0]).toBe(
+      'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    );
+    expect(document.querySelector('.basemap-control-optional-key')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>('Google Maps API key')).toBeTruthy();
+  });
+
+  it('upgrades to the Map Tiles API when a key is entered in the optional prompt', async () => {
+    const { map, controlCorner } = createMockMap();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        session: 'sess-opt',
+        expiry: String(Math.floor(Date.now() / 1000) + 3600),
+      }),
+      text: async () => '',
+    }));
+    globalThis.fetch = fetchMock as never;
+
+    const control = new BasemapControl({ collapsed: false, allowMultiple: true });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('google-satellite');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const input = screen.getByLabelText<HTMLInputElement>('Google Maps API key');
+    fireEvent.input(input, { target: { value: 'g-secret' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await flushAsync();
+    await flushAsync();
+
+    // The basemap is re-applied with the authorized Map Tiles API tiles, and the
+    // now-redundant optional prompt disappears.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastSourceFor(map, 'google-satellite')?.tiles?.[0]).toBe(
+      'https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=sess-opt&key=g-secret',
+    );
+    expect(document.querySelector('.basemap-control-optional-key')).toBeNull();
+  });
+
+  it('does not show the optional key prompt when a Google key is configured', async () => {
+    const { map, controlCorner } = createMockMap();
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        session: 'sess-z',
+        expiry: String(Math.floor(Date.now() / 1000) + 3600),
+      }),
+      text: async () => '',
+    })) as never;
+
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      googleMapsApiKey: 'g-secret',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('google-satellite');
+
+    expect(document.querySelector('.basemap-control-optional-key')).toBeNull();
+  });
 });
