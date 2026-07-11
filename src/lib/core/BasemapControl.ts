@@ -232,6 +232,11 @@ export class BasemapControl implements IControl {
   // The basemap whose application last failed for a missing credential, so the
   // inline credential field's Enter key can re-attempt it (#837).
   private _lastFailedBasemapId?: string;
+  // The id of a just-applied basemap that is showing its keyless public tiles
+  // because no API key is set (currently the Google Maps/Satellite/Terrain/
+  // Hybrid basemaps). The panel offers an optional inline key input that
+  // upgrades it to the authorized tiles; leaving it blank keeps the fallback.
+  private _optionalKeyBasemapId?: string;
   // Detaches the listeners watching the in-flight style load (see
   // _watchStyleLoad). Set while a style swap is settling, cleared once it
   // succeeds, fails, or is superseded by a newer swap.
@@ -597,6 +602,12 @@ export class BasemapControl implements IControl {
         loading: false,
         error: undefined,
       };
+      // Offer the optional key input when this basemap fell back to its keyless
+      // public tiles (no API key configured); clear it otherwise so the prompt
+      // does not linger on a keyed or non-fallback basemap.
+      this._optionalKeyBasemapId = this._basemapUsesKeylessFallback(basemap)
+        ? basemap.id
+        : undefined;
       this._renderContent(true);
       this._emit({
         type: 'basemapchange',
@@ -1363,6 +1374,65 @@ export class BasemapControl implements IControl {
     if (this._lastFailedBasemapId) this._selectBasemap(this._lastFailedBasemapId);
   }
 
+  // Renders the optional API key input shown after a basemap falls back to its
+  // keyless public tiles, so the user can enter a key to upgrade to the
+  // authorized provider tiles (or leave it blank to keep the public ones).
+  // Returns null unless such a basemap is the active selection and still keyless.
+  private _createOptionalKeyPrompt(): HTMLElement | null {
+    const id = this._optionalKeyBasemapId;
+    if (!id) return null;
+    const basemap = this._basemaps.find((candidate) => candidate.id === id);
+    if (
+      !basemap ||
+      !this._state.activeBasemapIds.includes(id) ||
+      !this._basemapUsesKeylessFallback(basemap)
+    ) {
+      return null;
+    }
+
+    const def = this._providerFieldDefs().find(
+      (candidate) => candidate.provider === basemap.provider && candidate.has,
+    );
+    if (!def) return null;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-optional-key';
+
+    const message = document.createElement('span');
+    message.className = 'basemap-control-optional-key-message';
+    message.textContent = `Enter a ${def.fields[0].placeholder} to load the official ${def.label} tiles.`;
+
+    const help = PROVIDER_CREDENTIAL_HELP[def.provider];
+    if (help) {
+      message.appendChild(document.createTextNode(' '));
+      const link = document.createElement('a');
+      link.className = 'basemap-control-status-link';
+      link.href = help.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = help.label;
+      message.appendChild(link);
+    }
+    wrapper.appendChild(message);
+
+    const fields = document.createElement('div');
+    fields.className = 'basemap-control-status-fields';
+    for (const field of def.fields) {
+      fields.appendChild(
+        this._createProviderSettingsInput({
+          ...field,
+          // Keep the field on screen while typing; Enter re-applies the basemap
+          // so the freshly entered key takes effect immediately.
+          rerenderOnInput: false,
+          clearErrorOnInput: false,
+          onEnter: () => this._reapplyBasemap(id),
+        }),
+      );
+    }
+    wrapper.appendChild(fields);
+    return wrapper;
+  }
+
   private _createProviderSettingsInput({
     className,
     type,
@@ -1513,7 +1583,19 @@ export class BasemapControl implements IControl {
       const inlineFields = this._createInlineCredentialFields();
       if (inlineFields) status.appendChild(inlineFields);
     } else {
-      status.textContent = `${resultCount} basemap${resultCount === 1 ? '' : 's'}`;
+      const count = document.createElement('span');
+      count.className = 'basemap-control-status-message';
+      count.textContent = `${resultCount} basemap${resultCount === 1 ? '' : 's'}`;
+      status.appendChild(count);
+
+      // After a basemap falls back to keyless public tiles, offer an optional
+      // key input right here so upgrading to the authorized tiles is one field
+      // away, without hunting for the provider settings view.
+      const optionalKey = this._createOptionalKeyPrompt();
+      if (optionalKey) {
+        status.classList.add('has-optional-key');
+        status.appendChild(optionalKey);
+      }
     }
     return status;
   }
@@ -1622,9 +1704,10 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'here');
   }
 
-  // True when a Google basemap needs a Map Tiles API key. The existing Google
-  // raster basemaps (Maps/Satellite/etc.) use keyless tiles, so only session or
-  // api-key based Google layers (e.g. Google Traffic) require the key input.
+  // True when a Google basemap can use a Map Tiles API key. Session-based Google
+  // layers (Google Traffic, plus the base Maps/Satellite/Terrain/Hybrid layers
+  // that upgrade to the authorized Map Tiles API when a key is present) and any
+  // api-key based Google tiles reveal the key input.
   private _hasGoogleApiKeyBasemaps(): boolean {
     return this._basemaps.some(
       (basemap) =>
@@ -1938,9 +2021,17 @@ export class BasemapControl implements IControl {
   // surface a "Get a ..." link and reveal the credential inputs.
   private async _resolveRasterTiles(basemap: BasemapDefinition): Promise<string[]> {
     if (basemap.source.type !== 'raster') return [];
-    const { tiles, googleSession } = basemap.source;
+    const { tiles, googleSession, fallbackTiles } = basemap.source;
 
     if (googleSession) {
+      // When no Google Maps API key is configured, use the keyless fallback
+      // tiles if the basemap provides them (the base Maps/Satellite/Terrain/
+      // Hybrid layers) rather than requiring the Map Tiles API. Sources without
+      // a fallback (e.g. Google Traffic) fall through and surface the missing
+      // credential error from the session resolver.
+      if (!this._googleMapsApiKey.trim() && fallbackTiles?.length) {
+        return fallbackTiles;
+      }
       return this._resolveGoogleSessionTiles(tiles, googleSession);
     }
 
@@ -1961,6 +2052,34 @@ export class BasemapControl implements IControl {
     if (provider === 'here') return this._hereApiKey.trim();
     if (provider === 'google') return this._googleMapsApiKey.trim();
     return '';
+  }
+
+  // True when a basemap is (or would be) served from its keyless public
+  // fallback tiles because its provider API key is not set. Drives the optional
+  // key prompt: these basemaps work without a key but can upgrade to the
+  // authorized provider tiles once one is entered.
+  private _basemapUsesKeylessFallback(basemap: BasemapDefinition): boolean {
+    return (
+      basemap.source.type === 'raster' &&
+      Boolean(basemap.source.googleSession) &&
+      (basemap.source.fallbackTiles?.length ?? 0) > 0 &&
+      !this._rasterApiKeyFor(basemap.provider)
+    );
+  }
+
+  // Re-applies an already-active basemap so a newly entered key takes effect.
+  // Unlike `_selectBasemap`, this never toggles the basemap off in multiple
+  // mode: a stacked raster is re-added on top (replacing its prior instance),
+  // and a single-mode basemap is simply re-set.
+  private _reapplyBasemap(id: string): void {
+    const basemap = this._basemaps.find((candidate) => candidate.id === id);
+    const isOverlay =
+      basemap?.source.type === 'raster' || basemap?.source.type === 'vector-overlay';
+    if (this._state.allowMultiple && isOverlay) {
+      this.addBasemap(id).catch(() => {});
+    } else {
+      this.setBasemap(id).catch(() => {});
+    }
   }
 
   private _missingRasterKeyError(provider: string): MissingCredentialError {

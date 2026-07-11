@@ -372,6 +372,30 @@
   color: inherit;
 }
 
+/* The status region gains a little breathing room when it hosts the optional
+   key prompt, so the input is not cramped against the results list. */
+.basemap-control-status.has-optional-key {
+  margin-bottom: 4px;
+}
+
+/* Optional, non-error prompt offering an API key upgrade after a basemap falls
+   back to its keyless public tiles. Styled as a subtle info callout, distinct
+   from the red error state, so it reads as an opt-in tip rather than a problem. */
+.basemap-control-optional-key {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #d6dbe4;
+  border-radius: 6px;
+  background: #f5f7fa;
+}
+
+.basemap-control-optional-key-message {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #475569;
+  line-height: 1.4;
+}
+
 .basemap-control-results {
   display: flex;
   flex-direction: column;

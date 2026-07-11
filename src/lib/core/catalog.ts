@@ -1,4 +1,8 @@
-import type { BasemapDefinition, BasemapProvider } from "./types";
+import type {
+  BasemapDefinition,
+  BasemapProvider,
+  GoogleSessionConfig,
+} from "./types";
 
 export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: "amazon", name: "Amazon Location", category: "General" },
@@ -186,6 +190,55 @@ const OPENFREEMAP_ATTRIBUTION =
 const TOMTOM_ATTRIBUTION = "&copy; TomTom";
 const HERE_ATTRIBUTION = "&copy; HERE";
 const GOOGLE_ATTRIBUTION = "&copy; Google";
+// Authorized Google Map Tiles API 2D tile endpoint. `{session}` is replaced
+// with a token minted from `createSession` and `{api-key}` with the configured
+// Google Maps API key.
+const GOOGLE_2DTILES_URL =
+  "https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session={session}&key={api-key}";
+
+// Google base raster basemaps prefer the official Map Tiles API when a Google
+// Maps API key is configured (like the Google Traffic overlay), minting a
+// session token so tiles come from Google's authorized endpoint. Without a key
+// they fall back to the keyless QGIS-style xyz tiles from mt1.google.com,
+// preserving the previous no-key behavior.
+function googleRasterBasemap({
+  id,
+  name,
+  category,
+  description,
+  fallbackLyrs,
+  session,
+  tags,
+}: {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  fallbackLyrs: string;
+  session: GoogleSessionConfig;
+  tags: string[];
+}): BasemapDefinition {
+  return {
+    id,
+    name,
+    provider: "google",
+    type: "raster",
+    category,
+    description,
+    attribution: GOOGLE_ATTRIBUTION,
+    source: {
+      type: "raster",
+      tiles: [GOOGLE_2DTILES_URL],
+      fallbackTiles: [
+        `https://mt1.google.com/vt/lyrs=${fallbackLyrs}&x={x}&y={y}&z={z}`,
+      ],
+      tileSize: 256,
+      maxzoom: 20,
+      googleSession: session,
+    },
+    tags,
+  };
+}
 const eoxS2CloudlessAttribution = (year: number): string =>
   `Sentinel-2 cloudless <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data ${year})`;
 // Annual EOX Sentinel-2 cloudless mosaics published as WMTS layers
@@ -319,48 +372,48 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     tiles: ["https://tile.osm.ch/switzerland/{z}/{x}/{y}.png"],
     tags: ["osm", "switzerland", "regional"],
   }),
-  rasterBasemap({
+  googleRasterBasemap({
     id: "google-maps",
     name: "Google Maps",
-    provider: "google",
     category: "Street",
-    description: "Google road map tiles from the QGIS basemaps source.",
-    attribution: "&copy; Google",
-    tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
-    maxzoom: 20,
+    description:
+      "Google road map tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
+    fallbackLyrs: "m",
+    session: { mapType: "roadmap" },
     tags: ["google", "street"],
   }),
-  rasterBasemap({
+  googleRasterBasemap({
     id: "google-satellite",
     name: "Google Satellite",
-    provider: "google",
     category: "Imagery",
-    description: "Google satellite tiles from the QGIS basemaps source.",
-    attribution: "&copy; Google",
-    tiles: ["https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"],
-    maxzoom: 20,
+    description:
+      "Google satellite tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
+    fallbackLyrs: "s",
+    session: { mapType: "satellite" },
     tags: ["google", "satellite", "imagery"],
   }),
-  rasterBasemap({
+  googleRasterBasemap({
     id: "google-terrain",
     name: "Google Terrain",
-    provider: "google",
     category: "Terrain",
-    description: "Google terrain tiles from the QGIS basemaps source.",
-    attribution: "&copy; Google",
-    tiles: ["https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}"],
-    maxzoom: 20,
+    description:
+      "Google terrain tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
+    fallbackLyrs: "p",
+    // The Map Tiles API requires `layerRoadmap` alongside the terrain map type
+    // for the terrain tiles to render.
+    session: { mapType: "terrain", layerTypes: ["layerRoadmap"] },
     tags: ["google", "terrain"],
   }),
-  rasterBasemap({
+  googleRasterBasemap({
     id: "google-hybrid",
     name: "Google Hybrid",
-    provider: "google",
     category: "Imagery",
-    description: "Google hybrid imagery tiles from the QGIS basemaps source.",
-    attribution: "&copy; Google",
-    tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
-    maxzoom: 20,
+    description:
+      "Google hybrid imagery tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
+    fallbackLyrs: "y",
+    // Hybrid is satellite imagery with the roadmap layer (roads and labels)
+    // painted on top, matching the classic Google "hybrid" map type.
+    session: { mapType: "satellite", layerTypes: ["layerRoadmap"] },
     tags: ["google", "hybrid", "imagery"],
   }),
   amazonStyleBasemap({
