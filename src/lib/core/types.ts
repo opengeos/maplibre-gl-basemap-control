@@ -23,16 +23,27 @@ export interface RasterBasemapSource {
    * `{session}` placeholder). The control creates the session lazily via the
    * `createSession` endpoint using the configured `googleMapsApiKey`, caches it
    * until it expires, then substitutes the token into the tiles. Used by the
-   * Google Traffic overlay, whose tiles have no static URL.
+   * Google Traffic overlay, whose tiles have no static URL, and by the Google
+   * base basemaps (Maps/Satellite/Terrain/Hybrid) when a key is configured.
    */
   googleSession?: GoogleSessionConfig;
+  /**
+   * Keyless tile templates used as a fallback when a `googleSession` source has
+   * no API key configured. The Google base basemaps prefer the authorized Map
+   * Tiles API when a `googleMapsApiKey` is set, but fall back to these public
+   * xyz tiles otherwise. Sources without a fallback (e.g. Google Traffic)
+   * instead surface a missing-credential error.
+   */
+  fallbackTiles?: string[];
 }
 
 /**
  * Configuration for a Google Map Tiles API session. Mirrors the body of the
  * `createSession` request. A traffic overlay uses `mapType: 'roadmap'`,
  * `layerTypes: ['layerTraffic']`, and `overlay: true` so the tiles are a
- * transparent traffic layer that can stack on top of any basemap.
+ * transparent traffic layer that can stack on top of any basemap. The base
+ * basemaps use `roadmap`, `satellite`, `terrain` (with `layerRoadmap`), and
+ * `satellite` + `layerRoadmap` (hybrid) to mirror the classic Google map types.
  */
 export interface GoogleSessionConfig {
   mapType: 'roadmap' | 'satellite' | 'terrain';

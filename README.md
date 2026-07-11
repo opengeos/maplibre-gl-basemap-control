@@ -213,6 +213,21 @@ key must have the Map Tiles API enabled.
 > key" or add **Map Tiles API** to the allowed list, then save (changes can take a
 > few minutes to propagate). Make sure billing is enabled on the project too.
 
+The same `googleMapsApiKey` also upgrades the base Google basemaps
+(`google-maps`, `google-satellite`, `google-terrain`, `google-hybrid`). When a
+key is set they load from the authorized Map Tiles API (via a tile session, like
+Google Traffic); without a key they fall back to keyless `mt1.google.com` xyz
+tiles so they keep working out of the box.
+
+> **Licensing caveat.** The keyless `mt1.google.com` tiles are Google Maps'
+> internal endpoints. They are **not** covered by any public or open license, and
+> accessing Google map content outside an official Google Maps Platform API
+> violates the [Google Maps Platform Terms of Service](https://cloud.google.com/maps-platform/terms).
+> They are convenient for local development and demos, but Google may rate-limit,
+> change, or block them at any time. For production use, set a `googleMapsApiKey`
+> so these basemaps use the authorized [Map Tiles API](https://developers.google.com/maps/documentation/tile)
+> (which requires the Map Tiles API enabled and billing on your project).
+
 ## API
 
 ### BasemapControl Options
@@ -230,7 +245,7 @@ key must have the Map Tiles API enabled.
 | `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles and the Mapbox Traffic overlay |
 | `tomtomApiKey` | `string` | `undefined` | Initial TomTom API key for the TomTom Traffic overlays |
 | `hereApiKey` | `string` | `undefined` | Initial HERE API key for the HERE Traffic overlay |
-| `googleMapsApiKey` | `string` | `undefined` | Initial Google Maps API key (Map Tiles API) for the Google Traffic overlay |
+| `googleMapsApiKey` | `string` | `undefined` | Initial Google Maps API key (Map Tiles API) for the Google Traffic overlay and the base Google Maps/Satellite/Terrain/Hybrid basemaps (which fall back to keyless tiles without a key) |
 | `basemaps` | `BasemapDefinition[]` | `[]` | Custom basemaps to add or use |
 | `providers` | `BasemapProvider[]` | `[]` | Custom provider labels |
 | `includeDefaultBasemaps` | `boolean` | `true` | Include the built-in public catalog |
@@ -296,7 +311,7 @@ const control = new BasemapControl({
 - `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
 - `setTomTomApiKey(apiKey)` - Set or update the TomTom API key used by TomTom Traffic overlays
 - `setHereApiKey(apiKey)` - Set or update the HERE API key used by the HERE Traffic overlay
-- `setGoogleMapsApiKey(apiKey)` - Set or update the Google Maps API key used by the Google Traffic overlay
+- `setGoogleMapsApiKey(apiKey)` - Set or update the Google Maps API key used by the Google Traffic overlay and the base Google basemaps
 - `getActiveBasemap()` - Return the most recently selected basemap definition
 - `getActiveBasemaps()` - Return all currently active basemap definitions
 - `getBasemaps()` - Return the catalog

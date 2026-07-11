@@ -290,6 +290,38 @@ describe("basemap catalog", () => {
     ).toBe(true);
   });
 
+  it("gives the base Google basemaps a session config and a keyless fallback", () => {
+    const byId = new Map(DEFAULT_BASEMAPS.map((basemap) => [basemap.id, basemap]));
+    const cases = [
+      { id: "google-maps", mapType: "roadmap", layerTypes: undefined, lyrs: "m" },
+      { id: "google-satellite", mapType: "satellite", layerTypes: undefined, lyrs: "s" },
+      {
+        id: "google-terrain",
+        mapType: "terrain",
+        layerTypes: ["layerRoadmap"],
+        lyrs: "p",
+      },
+      {
+        id: "google-hybrid",
+        mapType: "satellite",
+        layerTypes: ["layerRoadmap"],
+        lyrs: "y",
+      },
+    ] as const;
+
+    for (const { id, mapType, layerTypes, lyrs } of cases) {
+      const basemap = byId.get(id);
+      expect(basemap?.source.type).toBe("raster");
+      if (basemap?.source.type !== "raster") continue;
+      expect(basemap.source.googleSession?.mapType).toBe(mapType);
+      expect(basemap.source.googleSession?.layerTypes).toEqual(layerTypes);
+      expect(basemap.source.tiles[0]).toContain("tile.googleapis.com");
+      expect(basemap.source.fallbackTiles?.[0]).toBe(
+        `https://mt1.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}`,
+      );
+    }
+  });
+
   it("lists TomTom and HERE as traffic providers", () => {
     expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toEqual(
       expect.arrayContaining(["tomtom", "here"]),

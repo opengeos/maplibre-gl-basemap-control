@@ -1622,9 +1622,10 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'here');
   }
 
-  // True when a Google basemap needs a Map Tiles API key. The existing Google
-  // raster basemaps (Maps/Satellite/etc.) use keyless tiles, so only session or
-  // api-key based Google layers (e.g. Google Traffic) require the key input.
+  // True when a Google basemap can use a Map Tiles API key. Session-based Google
+  // layers (Google Traffic, plus the base Maps/Satellite/Terrain/Hybrid layers
+  // that upgrade to the authorized Map Tiles API when a key is present) and any
+  // api-key based Google tiles reveal the key input.
   private _hasGoogleApiKeyBasemaps(): boolean {
     return this._basemaps.some(
       (basemap) =>
@@ -1938,9 +1939,17 @@ export class BasemapControl implements IControl {
   // surface a "Get a ..." link and reveal the credential inputs.
   private async _resolveRasterTiles(basemap: BasemapDefinition): Promise<string[]> {
     if (basemap.source.type !== 'raster') return [];
-    const { tiles, googleSession } = basemap.source;
+    const { tiles, googleSession, fallbackTiles } = basemap.source;
 
     if (googleSession) {
+      // When no Google Maps API key is configured, use the keyless fallback
+      // tiles if the basemap provides them (the base Maps/Satellite/Terrain/
+      // Hybrid layers) rather than requiring the Map Tiles API. Sources without
+      // a fallback (e.g. Google Traffic) fall through and surface the missing
+      // credential error from the session resolver.
+      if (!this._googleMapsApiKey.trim() && fallbackTiles?.length) {
+        return fallbackTiles;
+      }
       return this._resolveGoogleSessionTiles(tiles, googleSession);
     }
 

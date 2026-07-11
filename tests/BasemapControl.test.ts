@@ -1606,4 +1606,55 @@ describe('BasemapControl traffic overlays', () => {
     await expect(control.addBasemap('google-traffic')).rejects.toThrow(/Map Tiles API/);
     expect(control.getState().error).toMatch(/HTTP 403/);
   });
+
+  it('uses the keyless xyz fallback for the base Google basemaps without a key', async () => {
+    const { map, controlCorner } = createMockMap();
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as never;
+
+    const control = new BasemapControl({ collapsed: false, allowMultiple: true });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('google-satellite');
+
+    // No Map Tiles API session request is made when there is no key.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(lastSourceFor(map, 'google-satellite')?.tiles?.[0]).toBe(
+      'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    );
+  });
+
+  it('upgrades the base Google basemaps to the Map Tiles API when a key is set', async () => {
+    const { map, controlCorner } = createMockMap();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        session: 'sess-hybrid',
+        expiry: String(Math.floor(Date.now() / 1000) + 3600),
+      }),
+      text: async () => '',
+    }));
+    globalThis.fetch = fetchMock as never;
+
+    const control = new BasemapControl({
+      collapsed: false,
+      allowMultiple: true,
+      googleMapsApiKey: 'g-secret',
+    });
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.addBasemap('google-hybrid');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://tile.googleapis.com/v1/createSession?key=g-secret');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      mapType: 'satellite',
+      layerTypes: ['layerRoadmap'],
+    });
+    expect(lastSourceFor(map, 'google-hybrid')?.tiles?.[0]).toBe(
+      'https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=sess-hybrid&key=g-secret',
+    );
+  });
 });
