@@ -180,6 +180,40 @@ describe("basemap catalog", () => {
     ).toBe(60);
   });
 
+  it("includes Maptoolkit vector styles", () => {
+    const catalog = createBasemapCatalog();
+    const styleUrl = (id: string): string => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe("maptoolkit");
+      expect(basemap?.type).toBe("style");
+      expect(basemap?.attribution).toContain("Maptoolkit");
+      expect(basemap?.attribution).toContain("OSM");
+      return basemap?.source.type === "style" ? basemap.source.url : "";
+    };
+
+    for (const styleId of [
+      "summer",
+      "light",
+      "hiking",
+      "cycling",
+      "winter",
+      "dark",
+      "street",
+    ]) {
+      expect(styleUrl(`maptoolkit-${styleId}`)).toBe(
+        `https://styles.maptoolkit.org/${styleId}.json`,
+      );
+    }
+
+    expect(
+      catalog.filter((basemap) => basemap.provider === "maptoolkit"),
+    ).toHaveLength(7);
+    expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toContain(
+      "maptoolkit",
+    );
+  });
+
   it("includes MapTiler styles with API key placeholders", () => {
     const catalog = createBasemapCatalog();
     const ids = catalog.map((basemap) => basemap.id);
@@ -315,10 +349,13 @@ describe("basemap catalog", () => {
       if (basemap?.source.type !== "raster") continue;
       expect(basemap.source.googleSession?.mapType).toBe(mapType);
       expect(basemap.source.googleSession?.layerTypes).toEqual(layerTypes);
-      expect(basemap.source.tiles[0]).toContain("tile.googleapis.com");
-      expect(basemap.source.fallbackTiles?.[0]).toBe(
+      // `tiles` is the keyless public endpoint, so a consumer reading the
+      // definition without a key never sees an unresolvable {session} template.
+      expect(basemap.source.tiles[0]).toBe(
         `https://mt1.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}`,
       );
+      expect(basemap.source.tiles[0]).not.toContain("tile.googleapis.com");
+      expect(basemap.source.sessionTiles?.[0]).toContain("tile.googleapis.com");
     }
   });
 
