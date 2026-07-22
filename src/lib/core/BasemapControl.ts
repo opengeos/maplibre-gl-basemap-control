@@ -2021,18 +2021,21 @@ export class BasemapControl implements IControl {
   // surface a "Get a ..." link and reveal the credential inputs.
   private async _resolveRasterTiles(basemap: BasemapDefinition): Promise<string[]> {
     if (basemap.source.type !== 'raster') return [];
-    const { tiles, googleSession, fallbackTiles } = basemap.source;
+    const { tiles, googleSession, sessionTiles } = basemap.source;
 
     if (googleSession) {
-      // When no Google Maps API key is configured, use the keyless fallback
-      // tiles if the basemap provides them (the base Maps/Satellite/Terrain/
-      // Hybrid layers) rather than requiring the Map Tiles API. Sources without
-      // a fallback (e.g. Google Traffic) fall through and surface the missing
-      // credential error from the session resolver.
-      if (!this._googleMapsApiKey.trim() && fallbackTiles?.length) {
-        return fallbackTiles;
+      // `tiles` holds the public keyless templates for the base Maps/Satellite/
+      // Terrain/Hybrid layers, so with no Google Maps API key they are used
+      // as-is and nothing touches the Map Tiles API. With a key they upgrade to
+      // `sessionTiles`. Sources that cannot work keylessly (e.g. Google Traffic)
+      // have no `sessionTiles` and keep the session template in `tiles`; those
+      // still go through the session resolver, which surfaces the missing
+      // credential error when no key is set.
+      const templates = sessionTiles?.length ? sessionTiles : tiles;
+      if (this._googleMapsApiKey.trim() || !sessionTiles?.length) {
+        return this._resolveGoogleSessionTiles(templates, googleSession);
       }
-      return this._resolveGoogleSessionTiles(tiles, googleSession);
+      return tiles;
     }
 
     if (!tiles.some((tile) => tile.includes(API_KEY_PLACEHOLDER))) {
@@ -2054,15 +2057,15 @@ export class BasemapControl implements IControl {
     return '';
   }
 
-  // True when a basemap is (or would be) served from its keyless public
-  // fallback tiles because its provider API key is not set. Drives the optional
-  // key prompt: these basemaps work without a key but can upgrade to the
-  // authorized provider tiles once one is entered.
+  // True when a basemap is (or would be) served from its public keyless `tiles`
+  // because its provider API key is not set. Drives the optional key prompt:
+  // these basemaps work without a key but can upgrade to the authorized
+  // provider tiles (`sessionTiles`) once one is entered.
   private _basemapUsesKeylessFallback(basemap: BasemapDefinition): boolean {
     return (
       basemap.source.type === 'raster' &&
       Boolean(basemap.source.googleSession) &&
-      (basemap.source.fallbackTiles?.length ?? 0) > 0 &&
+      (basemap.source.sessionTiles?.length ?? 0) > 0 &&
       !this._rasterApiKeyFor(basemap.provider)
     );
   }

@@ -28,13 +28,17 @@ export interface RasterBasemapSource {
    */
   googleSession?: GoogleSessionConfig;
   /**
-   * Keyless tile templates used as a fallback when a `googleSession` source has
-   * no API key configured. The Google base basemaps prefer the authorized Map
-   * Tiles API when a `googleMapsApiKey` is set, but fall back to these public
-   * xyz tiles otherwise. Sources without a fallback (e.g. Google Traffic)
-   * instead surface a missing-credential error.
+   * Authorized tile templates used *instead of* `tiles` once a provider key is
+   * configured, for sources that also work without one. The Google base
+   * basemaps keep the public keyless xyz tiles in `tiles` — so `tiles` is
+   * always directly usable — and upgrade to these Map Tiles API templates
+   * (which need a `{session}` token) when a `googleMapsApiKey` is set.
+   *
+   * Sources that cannot work without a key (e.g. Google Traffic) leave this
+   * unset and put the session template in `tiles`; those surface a
+   * missing-credential error when no key is configured.
    */
-  fallbackTiles?: string[];
+  sessionTiles?: string[];
 }
 
 /**

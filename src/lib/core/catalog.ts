@@ -14,6 +14,7 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: "here", name: "HERE", category: "Traffic" },
   { id: "mapbox", name: "Mapbox", category: "General" },
   { id: "maptiler", name: "MapTiler", category: "General" },
+  { id: "maptoolkit", name: "Maptoolkit", category: "Outdoor" },
   { id: "nasa-gibs", name: "NASA GIBS", category: "Imagery" },
   { id: "nlmaps", name: "nlmaps", category: "Regional" },
   { id: "openbasiskaart", name: "Openbasiskaart", category: "Regional" },
@@ -174,6 +175,33 @@ function mapboxStyleBasemap({
   });
 }
 
+function mapToolkitStyleBasemap({
+  id,
+  name,
+  styleId,
+  category,
+  description,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  styleId: string;
+  category: string;
+  description: string;
+  tags?: string[];
+}): BasemapDefinition {
+  return styleBasemap({
+    id,
+    name,
+    provider: "maptoolkit",
+    category,
+    description,
+    attribution: MAPTOOLKIT_ATTRIBUTION,
+    url: `https://styles.maptoolkit.org/${styleId}.json`,
+    tags: ["maptoolkit", "vector", "style", ...tags],
+  });
+}
+
 function sortProviders(providers: BasemapProvider[]): BasemapProvider[] {
   return [...providers].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -185,6 +213,11 @@ const MAPBOX_ATTRIBUTION = "&copy; Mapbox &copy; OpenStreetMap contributors";
 const MAPTILER_ATTRIBUTION =
   "&copy; MapTiler &copy; OpenStreetMap contributors";
 const OSM_ATTRIBUTION = "&copy; OpenStreetMap contributors";
+// The Maptoolkit style JSONs ship no `attribution` on their sources, and
+// Maptoolkit requires the "© Maptoolkit © OSM" credit as clickable links, so the
+// catalog supplies it.
+const MAPTOOLKIT_ATTRIBUTION =
+  '<a href="https://www.maptoolkit.org" target="_blank" rel="noopener">&copy; Maptoolkit</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OSM</a>';
 const OPENFREEMAP_ATTRIBUTION =
   "OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap";
 const TOMTOM_ATTRIBUTION = "&copy; TomTom";
@@ -196,17 +229,17 @@ const GOOGLE_ATTRIBUTION = "&copy; Google";
 const GOOGLE_2DTILES_URL =
   "https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session={session}&key={api-key}";
 
-// Google base raster basemaps prefer the official Map Tiles API when a Google
-// Maps API key is configured (like the Google Traffic overlay), minting a
-// session token so tiles come from Google's authorized endpoint. Without a key
-// they fall back to the keyless QGIS-style xyz tiles from mt1.google.com,
-// preserving the previous no-key behavior.
+// Google base raster basemaps default to the keyless QGIS-style xyz tiles from
+// mt1.google.com, so `tiles` is directly usable with no credentials. When a
+// Google Maps API key is configured they upgrade to `sessionTiles`, the official
+// Map Tiles API endpoint (like the Google Traffic overlay), minting a session
+// token so tiles come from Google's authorized endpoint.
 function googleRasterBasemap({
   id,
   name,
   category,
   description,
-  fallbackLyrs,
+  publicLyrs,
   session,
   tags,
 }: {
@@ -214,7 +247,7 @@ function googleRasterBasemap({
   name: string;
   category: string;
   description: string;
-  fallbackLyrs: string;
+  publicLyrs: string;
   session: GoogleSessionConfig;
   tags: string[];
 }): BasemapDefinition {
@@ -228,10 +261,8 @@ function googleRasterBasemap({
     attribution: GOOGLE_ATTRIBUTION,
     source: {
       type: "raster",
-      tiles: [GOOGLE_2DTILES_URL],
-      fallbackTiles: [
-        `https://mt1.google.com/vt/lyrs=${fallbackLyrs}&x={x}&y={y}&z={z}`,
-      ],
+      tiles: [`https://mt1.google.com/vt/lyrs=${publicLyrs}&x={x}&y={y}&z={z}`],
+      sessionTiles: [GOOGLE_2DTILES_URL],
       tileSize: 256,
       maxzoom: 20,
       googleSession: session,
@@ -378,7 +409,7 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     category: "Street",
     description:
       "Google road map tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
-    fallbackLyrs: "m",
+    publicLyrs: "m",
     session: { mapType: "roadmap" },
     tags: ["google", "street"],
   }),
@@ -388,7 +419,7 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     category: "Imagery",
     description:
       "Google satellite tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
-    fallbackLyrs: "s",
+    publicLyrs: "s",
     session: { mapType: "satellite" },
     tags: ["google", "satellite", "imagery"],
   }),
@@ -398,7 +429,7 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     category: "Terrain",
     description:
       "Google terrain tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
-    fallbackLyrs: "p",
+    publicLyrs: "p",
     // The Map Tiles API requires `layerRoadmap` alongside the terrain map type
     // for the terrain tiles to render.
     session: { mapType: "terrain", layerTypes: ["layerRoadmap"] },
@@ -410,7 +441,7 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     category: "Imagery",
     description:
       "Google hybrid imagery tiles. Uses the Map Tiles API when a Google Maps API key is set, otherwise keyless xyz tiles.",
-    fallbackLyrs: "y",
+    publicLyrs: "y",
     // Hybrid is satellite imagery with the roadmap layer (roads and labels)
     // painted on top, matching the classic Google "hybrid" map type.
     session: { mapType: "satellite", layerTypes: ["layerRoadmap"] },
@@ -1323,6 +1354,65 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     },
     tags: ["openfreemap", "vector", "style", "3d", "liberty"],
   },
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-summer",
+    name: "Maptoolkit Summer",
+    styleId: "summer",
+    category: "Outdoor",
+    description:
+      "Maptoolkit outdoor summer style with hillshading and terrain detail.",
+    tags: ["summer", "outdoor", "terrain", "hillshade"],
+  }),
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-light",
+    name: "Maptoolkit Light",
+    styleId: "light",
+    category: "Light",
+    description: "Light Maptoolkit style for data overlays.",
+    tags: ["light", "dataviz"],
+  }),
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-hiking",
+    name: "Maptoolkit Hiking",
+    styleId: "hiking",
+    category: "Outdoor",
+    description:
+      "Maptoolkit hiking style with trails, rock drawing, and terrain.",
+    tags: ["hiking", "outdoor", "trails", "terrain"],
+  }),
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-cycling",
+    name: "Maptoolkit Cycling",
+    styleId: "cycling",
+    category: "Cycling",
+    description: "Maptoolkit cycling style with bike routes and terrain.",
+    tags: ["cycling", "outdoor", "routes"],
+  }),
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-winter",
+    name: "Maptoolkit Winter",
+    styleId: "winter",
+    category: "Outdoor",
+    description:
+      "Maptoolkit winter sports style with slopes and mountain terrain.",
+    tags: ["winter", "skiing", "slopes", "outdoor"],
+  }),
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-dark",
+    name: "Maptoolkit Dark",
+    styleId: "dark",
+    category: "Dark",
+    description: "Dark Maptoolkit style for high-contrast overlays.",
+    tags: ["dark"],
+  }),
+  mapToolkitStyleBasemap({
+    id: "maptoolkit-street",
+    name: "Maptoolkit Street",
+    styleId: "street",
+    category: "Street",
+    description: "Maptoolkit general-purpose street style.",
+    tags: ["street", "streets", "navigation"],
+  }),
   rasterTrafficBasemap({
     id: "tomtom-traffic-flow-relative",
     name: "TomTom Traffic Flow",

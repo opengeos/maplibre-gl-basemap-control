@@ -8,7 +8,7 @@ A MapLibre GL JS control for searching and switching public basemaps. It keeps t
 ## Features
 
 - Search-first basemap picker inspired by QuickMapServices
-- Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, and Mapbox styles
+- Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, Mapbox styles, and Maptoolkit styles
 - Stackable traffic overlays for TomTom, HERE, Mapbox, and Google
 - Custom basemap and provider definitions
 - MapLibre `IControl` implementation
@@ -214,10 +214,18 @@ key must have the Map Tiles API enabled.
 > few minutes to propagate). Make sure billing is enabled on the project too.
 
 The same `googleMapsApiKey` also upgrades the base Google basemaps
-(`google-maps`, `google-satellite`, `google-terrain`, `google-hybrid`). When a
-key is set they load from the authorized Map Tiles API (via a tile session, like
-Google Traffic); without a key they fall back to keyless `mt1.google.com` xyz
-tiles so they keep working out of the box.
+(`google-maps`, `google-satellite`, `google-terrain`, `google-hybrid`). By
+default these use the public keyless `mt1.google.com` xyz tiles, so they work out
+of the box; when a key is set they load from the authorized Map Tiles API instead
+(via a tile session, like Google Traffic).
+
+In the catalog definition this is the split between `source.tiles` and
+`source.sessionTiles`: `tiles` always holds the public keyless template, so
+reading `source.tiles` without a key gives a directly usable URL, while
+`sessionTiles` holds the Map Tiles API template (with its `{session}` and
+`{api-key}` placeholders) that is only used once a key is configured. Basemaps
+that cannot work keylessly, such as `google-traffic`, have no `sessionTiles` and
+keep the session template in `tiles`.
 
 > **Licensing caveat.** The keyless `mt1.google.com` tiles are Google Maps'
 > internal endpoints. They are **not** covered by any public or open license, and
@@ -227,6 +235,26 @@ tiles so they keep working out of the box.
 > change, or block them at any time. For production use, set a `googleMapsApiKey`
 > so these basemaps use the authorized [Map Tiles API](https://developers.google.com/maps/documentation/tile)
 > (which requires the Map Tiles API enabled and billing on your project).
+
+## Maptoolkit Styles
+
+The catalog ships the seven [Maptoolkit](https://www.maptoolkit.org) vector styles. They need no
+API key and load straight from `https://styles.maptoolkit.org/{styleId}.json`:
+
+| Basemap id | Style | Category |
+|------------|-------|----------|
+| `maptoolkit-summer` | `summer` | Outdoor |
+| `maptoolkit-light` | `light` | Light |
+| `maptoolkit-hiking` | `hiking` | Outdoor |
+| `maptoolkit-cycling` | `cycling` | Cycling |
+| `maptoolkit-winter` | `winter` | Outdoor |
+| `maptoolkit-dark` | `dark` | Dark |
+| `maptoolkit-street` | `street` | Street |
+
+> **Attribution.** The Maptoolkit style JSONs carry no `attribution` on their sources, so the catalog
+> supplies the required "© Maptoolkit © OSM" credit links. Maptoolkit additionally requires the
+> Maptoolkit logo (at least 24px tall) to be visible and unobstructed on the map; add it to your own
+> UI, since the control cannot render it for you.
 
 ## API
 
