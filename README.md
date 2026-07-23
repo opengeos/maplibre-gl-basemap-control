@@ -8,7 +8,7 @@ A MapLibre GL JS control for searching and switching public basemaps. It keeps t
 ## Features
 
 - Search-first basemap picker inspired by QuickMapServices
-- Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, Mapbox styles, and Maptoolkit styles
+- Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, Mapbox styles, Maptoolkit styles, Protomaps styles, and Stadia Maps basemaps
 - Stackable traffic overlays for TomTom, HERE, Mapbox, and Google
 - Custom basemap and provider definitions
 - MapLibre `IControl` implementation
@@ -138,11 +138,12 @@ The built-in catalog includes MapTiler styles such as Streets, Base, Dataviz, Ou
 Satellite Hybrid, Satellite Plain, Aquarelle, Backdrop, Landscape, Ocean, Toner, OpenStreetMap, and
 Winter. It also includes Amazon Location styles: Standard, Monochrome, Hybrid, and Satellite.
 Mapbox styles include Streets, Outdoors, Light, Dark, Satellite, Satellite Streets, Navigation Day,
-and Navigation Night.
+and Navigation Night. Protomaps styles include Light, Dark, White, Black, Grayscale, and Contrast.
 
-MapTiler and Amazon Location styles require API keys. Mapbox styles require an access token. Users
-can enter keys and tokens in the dedicated API keys view, opened from the key button in the panel
-header, or you can provide them when creating the control. When a basemap is selected before its key
+MapTiler, Amazon Location, and Protomaps styles require API keys. Mapbox styles require an access
+token. Users can enter keys and tokens in the dedicated API keys view, opened from the key button in
+the panel header, or you can provide them when creating the control. When a basemap is selected
+before its key
 is set, the control surfaces the error and the matching credential field inline, before any
 destructive style change, so the missing key can be entered and the basemap retried with Enter.
 
@@ -153,6 +154,8 @@ const control = new BasemapControl({
   amazonApiKey: 'YOUR_AMAZON_LOCATION_API_KEY',
   awsRegion: 'us-east-1',
   mapboxAccessToken: 'YOUR_MAPBOX_ACCESS_TOKEN',
+  protomapsApiKey: 'YOUR_PROTOMAPS_API_KEY',
+  stadiaApiKey: 'YOUR_STADIA_MAPS_API_KEY',
 });
 ```
 
@@ -173,6 +176,32 @@ Mapbox style URLs follow this form:
 ```text
 https://api.mapbox.com/styles/v1/mapbox/{styleId}?access_token={api-key}
 ```
+
+Protomaps style URLs follow this form:
+
+```text
+https://api.protomaps.com/styles/v5/{styleId}/en.json?key={api-key}
+```
+
+### Stadia Maps and Stamen
+
+The catalog ships Stadia Maps' own styles (Alidade Smooth, Alidade Smooth Dark, Alidade Satellite,
+Outdoors, OSM Bright) and the Stadia x Stamen classics (Toner, Toner Lite, Toner Background, Toner
+Labels, Terrain, Terrain Background, Terrain Labels, Watercolor). Stadia has hosted the Stamen
+tilesets since 2023.
+
+These are raster tiles that take the key directly on each tile URL:
+
+```text
+https://tiles.stadiamaps.com/tiles/{slug}/{z}/{x}/{y}.png?api_key={api-key}
+```
+
+Alidade Satellite and Stamen Watercolor are served as `.jpg` instead. The `_labels` layers are
+transparent overlays, so pair them with `allowMultiple: true` to stack them over a base layer.
+
+> **Note.** Stadia also supports keyless access from allowlisted domains (localhost included), but
+> this control always sends `api_key`, so a key is required here. Set `stadiaApiKey` or enter it in
+> the panel's API keys view.
 
 ### Traffic Overlays
 
@@ -271,6 +300,8 @@ API key and load straight from `https://styles.maptoolkit.org/{styleId}.json`:
 | `amazonApiKey` | `string` | `undefined` | Initial Amazon Location API key for built-in Amazon styles |
 | `awsRegion` | `string` | `'us-east-1'` | AWS region for built-in Amazon Location styles |
 | `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles and the Mapbox Traffic overlay |
+| `protomapsApiKey` | `string` | `undefined` | Initial Protomaps API key for built-in Protomaps styles |
+| `stadiaApiKey` | `string` | `undefined` | Initial Stadia Maps API key for built-in Stadia and Stadia x Stamen basemaps |
 | `tomtomApiKey` | `string` | `undefined` | Initial TomTom API key for the TomTom Traffic overlays |
 | `hereApiKey` | `string` | `undefined` | Initial HERE API key for the HERE Traffic overlay |
 | `googleMapsApiKey` | `string` | `undefined` | Initial Google Maps API key (Map Tiles API) for the Google Traffic overlay and the base Google Maps/Satellite/Terrain/Hybrid basemaps (which fall back to keyless tiles without a key) |
@@ -337,6 +368,8 @@ const control = new BasemapControl({
 - `setMapTilerApiKey(apiKey)` - Set or update the MapTiler API key used by MapTiler styles
 - `setAmazonCredentials(apiKey, awsRegion)` - Set or update Amazon Location credentials
 - `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
+- `setProtomapsApiKey(apiKey)` - Set or update the Protomaps API key used by Protomaps styles
+- `setStadiaApiKey(apiKey)` - Set or update the Stadia Maps API key used by Stadia basemaps
 - `setTomTomApiKey(apiKey)` - Set or update the TomTom API key used by TomTom Traffic overlays
 - `setHereApiKey(apiKey)` - Set or update the HERE API key used by the HERE Traffic overlay
 - `setGoogleMapsApiKey(apiKey)` - Set or update the Google Maps API key used by the Google Traffic overlay and the base Google basemaps

@@ -6,6 +6,7 @@ import {
   DEFAULT_BASEMAP_PROVIDERS,
   filterBasemaps,
   getBasemapCategories,
+  resolveBasemapProviders,
 } from "../src/lib/core/catalog";
 
 describe("basemap catalog", () => {
@@ -70,7 +71,25 @@ describe("basemap catalog", () => {
     expect(ids).toContain("swisstopo-swissimage");
     expect(ids).toContain("nasa-gibs-blue-marble");
     expect(ids).toContain("usgs-us-topo");
-    expect(ids).toContain("nlmaps-luchtfoto");
+  });
+
+  it("no longer ships the nlmaps provider or its basemaps", () => {
+    const catalog = createBasemapCatalog();
+
+    expect(
+      catalog.filter((basemap) => basemap.provider === "nlmaps"),
+    ).toHaveLength(0);
+    expect(
+      catalog.filter((basemap) => basemap.id.startsWith("nlmaps-")),
+    ).toHaveLength(0);
+    expect(
+      DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id),
+    ).not.toContain("nlmaps");
+    // The provider list is also derived from the catalog, so a stray basemap
+    // would resurrect the filter entry even without the default above.
+    expect(resolveBasemapProviders(catalog).map((p) => p.id)).not.toContain(
+      "nlmaps",
+    );
   });
 
   it("includes the Openbasiskaart Netherlands basemap on the Web Mercator grid", () => {
@@ -178,6 +197,128 @@ describe("basemap catalog", () => {
     expect(
       catalog.find((basemap) => basemap.id === "openfreemap-3d")?.view?.pitch,
     ).toBe(60);
+  });
+
+  it("includes Stadia Maps and Stadia x Stamen basemaps", () => {
+    const catalog = createBasemapCatalog();
+    const stadia = catalog.filter((basemap) => basemap.provider === "stadia");
+    const tileUrl = (id: string): string => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe("stadia");
+      return basemap?.source.type === "raster" ? basemap.source.tiles[0] : "";
+    };
+
+    const cases: Array<[string, string, "png" | "jpg"]> = [
+      ["stadia-alidade-smooth", "alidade_smooth", "png"],
+      ["stadia-alidade-smooth-dark", "alidade_smooth_dark", "png"],
+      ["stadia-alidade-satellite", "alidade_satellite", "jpg"],
+      ["stadia-outdoors", "outdoors", "png"],
+      ["stadia-osm-bright", "osm_bright", "png"],
+      ["stadia-stamen-toner", "stamen_toner", "png"],
+      ["stadia-stamen-toner-lite", "stamen_toner_lite", "png"],
+      ["stadia-stamen-toner-background", "stamen_toner_background", "png"],
+      ["stadia-stamen-toner-labels", "stamen_toner_labels", "png"],
+      ["stadia-stamen-terrain", "stamen_terrain", "png"],
+      ["stadia-stamen-terrain-background", "stamen_terrain_background", "png"],
+      ["stadia-stamen-terrain-labels", "stamen_terrain_labels", "png"],
+      ["stadia-stamen-watercolor", "stamen_watercolor", "jpg"],
+    ];
+
+    for (const [id, slug, extension] of cases) {
+      expect(tileUrl(id)).toBe(
+        `https://tiles.stadiamaps.com/tiles/${slug}/{z}/{x}/{y}.${extension}?api_key={api-key}`,
+      );
+    }
+
+    expect(stadia).toHaveLength(cases.length);
+    // Stamen styles must carry the extra Stamen Design credit; the house
+    // Stadia styles must not.
+    expect(
+      catalog.find((b) => b.id === "stadia-stamen-watercolor")?.attribution,
+    ).toContain("Stamen Design");
+    expect(
+      catalog.find((b) => b.id === "stadia-alidade-smooth")?.attribution,
+    ).not.toContain("Stamen Design");
+    for (const basemap of stadia) {
+      expect(basemap.attribution).toContain("Stadia Maps");
+    }
+    expect(
+      catalog.find((b) => b.id === "stadia-stamen-watercolor")?.category,
+    ).toBe("Artistic");
+    expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toContain(
+      "stadia",
+    );
+  });
+
+  it("includes Protomaps vector styles with API key placeholders", () => {
+    const catalog = createBasemapCatalog();
+    const styleUrl = (id: string): string => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe("protomaps");
+      expect(basemap?.type).toBe("style");
+      return basemap?.source.type === "style" ? basemap.source.url : "";
+    };
+
+    for (const styleId of [
+      "light",
+      "dark",
+      "white",
+      "black",
+      "grayscale",
+      "contrast",
+    ]) {
+      expect(styleUrl(`protomaps-${styleId}`)).toBe(
+        `https://api.protomaps.com/styles/v5/${styleId}/en.json?key={api-key}`,
+      );
+    }
+
+    expect(
+      catalog.filter((basemap) => basemap.provider === "protomaps"),
+    ).toHaveLength(6);
+    expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toContain(
+      "protomaps",
+    );
+  });
+
+  it("includes the additional OpenRailwayMap, USGS, and Esri layers", () => {
+    const catalog = createBasemapCatalog();
+    const tileUrl = (id: string, provider: string): string => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe(provider);
+      return basemap?.source.type === "raster" ? basemap.source.tiles[0] : "";
+    };
+
+    for (const layer of ["maxspeed", "electrification", "signals"]) {
+      expect(tileUrl(`openrailwaymap-${layer}`, "openrailwaymap")).toBe(
+        `https://a.tiles.openrailwaymap.org/${layer}/{z}/{x}/{y}.png`,
+      );
+      expect(
+        catalog.find((b) => b.id === `openrailwaymap-${layer}`)?.category,
+      ).toBe("Transport");
+    }
+
+    expect(tileUrl("usgs-us-hydro", "usgs")).toBe(
+      "https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}",
+    );
+    expect(tileUrl("usgs-us-shaded-relief", "usgs")).toBe(
+      "https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
+    );
+
+    expect(tileUrl("esri-world-dark-gray-canvas", "esri")).toBe(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    );
+    expect(tileUrl("esri-world-light-gray-reference", "esri")).toBe(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    );
+    expect(tileUrl("esri-world-dark-gray-reference", "esri")).toBe(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    );
+    expect(
+      catalog.find((b) => b.id === "esri-world-dark-gray-canvas")?.category,
+    ).toBe("Dark");
   });
 
   it("includes Maptoolkit vector styles", () => {
