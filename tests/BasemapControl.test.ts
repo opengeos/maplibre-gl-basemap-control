@@ -687,6 +687,87 @@ describe('BasemapControl', () => {
     expect(map.setStyle).not.toHaveBeenCalled();
   });
 
+  it('requires an API key before applying Stadia basemaps', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ collapsed: false });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('stadia-stamen-watercolor')).rejects.toThrow(
+      'Enter a Stadia Maps API key before applying this layer.',
+    );
+  });
+
+  it('substitutes the Stadia API key into the tile URL', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ stadiaApiKey: 'st secret' });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('stadia-stamen-watercolor');
+
+    expect(lastSourceFor(map, 'stadia-stamen-watercolor')?.tiles?.[0]).toBe(
+      'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg?api_key=st%20secret',
+    );
+  });
+
+  it('applies a Stadia key set after the failed attempt', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({});
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('stadia-alidade-smooth')).rejects.toThrow(
+      'Enter a Stadia Maps API key before applying this layer.',
+    );
+
+    control.setStadiaApiKey('later-key');
+    await control.setBasemap('stadia-alidade-smooth');
+
+    expect(lastSourceFor(map, 'stadia-alidade-smooth')?.tiles?.[0]).toBe(
+      'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=later-key',
+    );
+  });
+
+  it('requires an API key before applying Protomaps styles', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ collapsed: false });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('protomaps-light')).rejects.toThrow(
+      'Enter a Protomaps API key before applying this basemap.',
+    );
+    expect(map.setStyle).not.toHaveBeenCalled();
+  });
+
+  it('substitutes the Protomaps API key into the style URL', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ protomapsApiKey: 'pm secret' });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('protomaps-dark');
+
+    expect(map.setStyle).toHaveBeenCalledWith(
+      'https://api.protomaps.com/styles/v5/dark/en.json?key=pm%20secret',
+    );
+  });
+
+  it('applies a Protomaps key set after the failed attempt', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({});
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('protomaps-grayscale')).rejects.toThrow(
+      'Enter a Protomaps API key before applying this basemap.',
+    );
+
+    control.setProtomapsApiKey('later-key');
+    await control.setBasemap('protomaps-grayscale');
+
+    expect(map.setStyle).toHaveBeenCalledWith(
+      'https://api.protomaps.com/styles/v5/grayscale/en.json?key=later-key',
+    );
+  });
+
   it('stacks raster basemaps when allowMultiple is enabled', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({

@@ -114,6 +114,15 @@ export interface BasemapControlOptions {
   amazonApiKey?: string;
   awsRegion?: string;
   mapboxAccessToken?: string;
+  /** Protomaps API key, used by the built-in Protomaps vector styles. */
+  protomapsApiKey?: string;
+  /**
+   * Stadia Maps API key, used by the built-in Stadia and Stadia x Stamen
+   * basemaps. Stadia also supports keyless access from allowlisted domains
+   * (including localhost); this control always sends the key, so set it here or
+   * in the panel's API keys view.
+   */
+  stadiaApiKey?: string;
   /** TomTom API key, used by the TomTom Traffic Flow overlays. */
   tomtomApiKey?: string;
   /** HERE API key, used by the HERE Traffic Flow overlay. */

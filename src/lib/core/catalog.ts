@@ -16,12 +16,13 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: "maptiler", name: "MapTiler", category: "General" },
   { id: "maptoolkit", name: "Maptoolkit", category: "Outdoor" },
   { id: "nasa-gibs", name: "NASA GIBS", category: "Imagery" },
-  { id: "nlmaps", name: "nlmaps", category: "Regional" },
   { id: "openbasiskaart", name: "Openbasiskaart", category: "Regional" },
   { id: "openfreemap", name: "OpenFreeMap", category: "Vector Styles" },
   { id: "openrailwaymap", name: "OpenRailwayMap", category: "Transport" },
   { id: "openstreetmap", name: "OpenStreetMap", category: "Community" },
   { id: "opentopomap", name: "OpenTopoMap", category: "Terrain" },
+  { id: "protomaps", name: "Protomaps", category: "Vector Styles" },
+  { id: "stadia", name: "Stadia Maps", category: "General" },
   { id: "swisstopo", name: "Swiss Federal Geoportal", category: "Regional" },
   { id: "tomtom", name: "TomTom", category: "Traffic" },
   { id: "topplusopen", name: "TopPlusOpen", category: "Regional" },
@@ -202,6 +203,72 @@ function mapToolkitStyleBasemap({
   });
 }
 
+function protomapsStyleBasemap({
+  id,
+  name,
+  styleId,
+  category,
+  description,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  styleId: string;
+  category: string;
+  description: string;
+  tags?: string[];
+}): BasemapDefinition {
+  return styleBasemap({
+    id,
+    name,
+    provider: "protomaps",
+    category,
+    description,
+    attribution: PROTOMAPS_ATTRIBUTION,
+    url: `https://api.protomaps.com/styles/v5/${styleId}/en.json?key={api-key}`,
+    tags: ["protomaps", "vector", "style", ...tags],
+  });
+}
+
+// Stadia Maps raster tiles. The key rides on each tile URL as `?api_key=`, so
+// the standard `{api-key}` raster substitution covers it (like TomTom/HERE).
+// The Stamen styles carry an extra Stamen Design credit.
+function stadiaRasterBasemap({
+  id,
+  name,
+  slug,
+  category,
+  description,
+  extension = "png",
+  maxzoom = 20,
+  stamen = false,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  description: string;
+  extension?: "png" | "jpg";
+  maxzoom?: number;
+  stamen?: boolean;
+  tags?: string[];
+}): BasemapDefinition {
+  return rasterBasemap({
+    id,
+    name,
+    provider: "stadia",
+    category,
+    description,
+    attribution: stamen ? STADIA_STAMEN_ATTRIBUTION : STADIA_ATTRIBUTION,
+    tiles: [
+      `https://tiles.stadiamaps.com/tiles/${slug}/{z}/{x}/{y}.${extension}?api_key={api-key}`,
+    ],
+    maxzoom,
+    tags: ["stadia", ...(stamen ? ["stamen"] : []), ...tags],
+  });
+}
+
 function sortProviders(providers: BasemapProvider[]): BasemapProvider[] {
   return [...providers].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -218,6 +285,12 @@ const OSM_ATTRIBUTION = "&copy; OpenStreetMap contributors";
 // catalog supplies it.
 const MAPTOOLKIT_ATTRIBUTION =
   '<a href="https://www.maptoolkit.org" target="_blank" rel="noopener">&copy; Maptoolkit</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OSM</a>';
+const STADIA_ATTRIBUTION =
+  '&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noopener">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> &copy; OpenStreetMap contributors';
+const STADIA_STAMEN_ATTRIBUTION =
+  '&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noopener">Stadia Maps</a> &copy; <a href="https://stamen.com/" target="_blank" rel="noopener">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> &copy; OpenStreetMap contributors';
+const PROTOMAPS_ATTRIBUTION =
+  '<a href="https://protomaps.com" target="_blank" rel="noopener">Protomaps</a> &copy; <a href="https://openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>';
 const OPENFREEMAP_ATTRIBUTION =
   "OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap";
 const TOMTOM_ATTRIBUTION = "&copy; TomTom";
@@ -851,6 +924,44 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     tags: ["esri", "gray", "canvas"],
   }),
   rasterBasemap({
+    id: "esri-world-dark-gray-canvas",
+    name: "World Dark Gray Canvas",
+    provider: "esri",
+    category: "Dark",
+    description: "Dark gray canvas basemap for high-contrast overlays.",
+    attribution: ESRI_ATTRIBUTION,
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    ],
+    tags: ["esri", "dark", "gray", "canvas"],
+  }),
+  rasterBasemap({
+    id: "esri-world-light-gray-reference",
+    name: "World Light Gray Reference",
+    provider: "esri",
+    category: "Labels",
+    description:
+      "Boundary and place label overlay matching the Light Gray Canvas basemap.",
+    attribution: ESRI_ATTRIBUTION,
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    ],
+    tags: ["esri", "labels", "reference", "gray", "overlay"],
+  }),
+  rasterBasemap({
+    id: "esri-world-dark-gray-reference",
+    name: "World Dark Gray Reference",
+    provider: "esri",
+    category: "Labels",
+    description:
+      "Boundary and place label overlay matching the Dark Gray Canvas basemap.",
+    attribution: ESRI_ATTRIBUTION,
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    ],
+    tags: ["esri", "labels", "reference", "dark", "gray", "overlay"],
+  }),
+  rasterBasemap({
     id: "esri-natgeo-world-map",
     name: "NatGeo World Map",
     provider: "esri",
@@ -1032,6 +1143,42 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     tags: ["rail", "transport", "osm"],
   }),
   rasterBasemap({
+    id: "openrailwaymap-maxspeed",
+    name: "OpenRailwayMap Maxspeed",
+    provider: "openrailwaymap",
+    category: "Transport",
+    description: "Railway line speed limits as a transparent overlay.",
+    attribution:
+      "Map data: &copy; OpenStreetMap contributors | Map style: OpenRailwayMap",
+    tiles: ["https://a.tiles.openrailwaymap.org/maxspeed/{z}/{x}/{y}.png"],
+    tags: ["rail", "transport", "osm", "maxspeed", "speed", "overlay"],
+  }),
+  rasterBasemap({
+    id: "openrailwaymap-electrification",
+    name: "OpenRailwayMap Electrification",
+    provider: "openrailwaymap",
+    category: "Transport",
+    description:
+      "Railway electrification systems and voltages as a transparent overlay.",
+    attribution:
+      "Map data: &copy; OpenStreetMap contributors | Map style: OpenRailwayMap",
+    tiles: [
+      "https://a.tiles.openrailwaymap.org/electrification/{z}/{x}/{y}.png",
+    ],
+    tags: ["rail", "transport", "osm", "electrification", "voltage", "overlay"],
+  }),
+  rasterBasemap({
+    id: "openrailwaymap-signals",
+    name: "OpenRailwayMap Signals",
+    provider: "openrailwaymap",
+    category: "Transport",
+    description: "Railway signalling infrastructure as a transparent overlay.",
+    attribution:
+      "Map data: &copy; OpenStreetMap contributors | Map style: OpenRailwayMap",
+    tiles: ["https://a.tiles.openrailwaymap.org/signals/{z}/{x}/{y}.png"],
+    tags: ["rail", "transport", "osm", "signals", "signalling", "overlay"],
+  }),
+  rasterBasemap({
     id: "opentopomap",
     name: "OpenTopoMap",
     provider: "opentopomap",
@@ -1042,6 +1189,121 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
     maxzoom: 17,
     tags: ["terrain", "topo", "relief"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-alidade-smooth",
+    name: "Stadia Alidade Smooth",
+    slug: "alidade_smooth",
+    category: "Light",
+    description: "Muted light basemap with few POIs, designed for overlays.",
+    tags: ["alidade", "smooth", "light", "dataviz"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-alidade-smooth-dark",
+    name: "Stadia Alidade Smooth Dark",
+    slug: "alidade_smooth_dark",
+    category: "Dark",
+    description: "Dark counterpart to Alidade Smooth for overlays.",
+    tags: ["alidade", "smooth", "dark", "dataviz"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-alidade-satellite",
+    name: "Stadia Alidade Satellite",
+    slug: "alidade_satellite",
+    category: "Imagery",
+    description: "Satellite imagery with Alidade labels and roads.",
+    extension: "jpg",
+    tags: ["alidade", "satellite", "imagery", "labels"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-outdoors",
+    name: "Stadia Outdoors",
+    slug: "outdoors",
+    category: "Outdoor",
+    description: "Outdoor basemap highlighting trails, parks, and ski slopes.",
+    tags: ["outdoors", "trails", "hiking", "recreation"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-osm-bright",
+    name: "Stadia OSM Bright",
+    slug: "osm_bright",
+    category: "Street",
+    description: "General-purpose OpenStreetMap street basemap.",
+    tags: ["osm", "bright", "street"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-toner",
+    name: "Stamen Toner",
+    slug: "stamen_toner",
+    category: "Dark",
+    description: "High-contrast black and white Stamen basemap.",
+    stamen: true,
+    tags: ["toner", "dark", "contrast", "monochrome"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-toner-lite",
+    name: "Stamen Toner Lite",
+    slug: "stamen_toner_lite",
+    category: "Light",
+    description: "Lighter, lower-contrast variant of Stamen Toner.",
+    stamen: true,
+    tags: ["toner", "lite", "light", "monochrome"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-toner-background",
+    name: "Stamen Toner Background",
+    slug: "stamen_toner_background",
+    category: "Dark",
+    description: "Stamen Toner without labels, for use under your own data.",
+    stamen: true,
+    tags: ["toner", "background", "no labels", "monochrome"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-toner-labels",
+    name: "Stamen Toner Labels",
+    slug: "stamen_toner_labels",
+    category: "Labels",
+    description: "Stamen Toner label overlay.",
+    stamen: true,
+    tags: ["toner", "labels", "overlay"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-terrain",
+    name: "Stamen Terrain",
+    slug: "stamen_terrain",
+    category: "Terrain",
+    description: "Stamen terrain basemap with hill shading and vegetation.",
+    stamen: true,
+    tags: ["terrain", "hillshade", "relief"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-terrain-background",
+    name: "Stamen Terrain Background",
+    slug: "stamen_terrain_background",
+    category: "Terrain",
+    description: "Stamen Terrain without labels or roads.",
+    stamen: true,
+    tags: ["terrain", "background", "hillshade", "no labels"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-terrain-labels",
+    name: "Stamen Terrain Labels",
+    slug: "stamen_terrain_labels",
+    category: "Labels",
+    description: "Stamen Terrain label overlay.",
+    stamen: true,
+    tags: ["terrain", "labels", "overlay"],
+  }),
+  stadiaRasterBasemap({
+    id: "stadia-stamen-watercolor",
+    name: "Stamen Watercolor",
+    slug: "stamen_watercolor",
+    category: "Artistic",
+    description: "Hand-painted watercolor basemap from Stamen Design.",
+    extension: "jpg",
+    maxzoom: 16,
+    stamen: true,
+    tags: ["watercolor", "artistic", "painted"],
   }),
   rasterBasemap({
     id: "swisstopo-national-map-color",
@@ -1145,6 +1407,31 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     tags: ["usgs", "topo", "united states"],
   }),
   rasterBasemap({
+    id: "usgs-us-hydro",
+    name: "USGS US Hydrography",
+    provider: "usgs",
+    category: "Labels",
+    description:
+      "USGS National Hydrography reference overlay of rivers, streams, and waterbodies.",
+    attribution: "Tiles courtesy of the U.S. Geological Survey",
+    tiles: [
+      "https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}",
+    ],
+    tags: ["usgs", "hydrography", "water", "overlay", "united states"],
+  }),
+  rasterBasemap({
+    id: "usgs-us-shaded-relief",
+    name: "USGS US Shaded Relief",
+    provider: "usgs",
+    category: "Terrain",
+    description: "USGS shaded relief basemap without other reference content.",
+    attribution: "Tiles courtesy of the U.S. Geological Survey",
+    tiles: [
+      "https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
+    ],
+    tags: ["usgs", "relief", "hillshade", "terrain", "united states"],
+  }),
+  rasterBasemap({
     id: "waymarkedtrails-hiking",
     name: "Waymarked Trails Hiking",
     provider: "waymarkedtrails",
@@ -1187,66 +1474,6 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
       "Map data: &copy; OpenStreetMap contributors | Map style: Waymarked Trails",
     tiles: ["https://tile.waymarkedtrails.org/slopes/{z}/{x}/{y}.png"],
     tags: ["slopes", "outdoor", "trails"],
-  }),
-  rasterBasemap({
-    id: "nlmaps-standaard",
-    name: "nlmaps Standaard",
-    provider: "nlmaps",
-    category: "Regional",
-    description: "Netherlands standard background map.",
-    attribution: "Kaartgegevens &copy; Kadaster",
-    tiles: [
-      "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
-    ],
-    tags: ["netherlands", "regional"],
-  }),
-  rasterBasemap({
-    id: "nlmaps-grijs",
-    name: "nlmaps Grijs",
-    provider: "nlmaps",
-    category: "Regional",
-    description: "Netherlands grey background map.",
-    attribution: "Kaartgegevens &copy; Kadaster",
-    tiles: [
-      "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png",
-    ],
-    tags: ["netherlands", "regional", "grey"],
-  }),
-  rasterBasemap({
-    id: "nlmaps-pastel",
-    name: "nlmaps Pastel",
-    provider: "nlmaps",
-    category: "Regional",
-    description: "Netherlands pastel background map.",
-    attribution: "Kaartgegevens &copy; Kadaster",
-    tiles: [
-      "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/pastel/EPSG:3857/{z}/{x}/{y}.png",
-    ],
-    tags: ["netherlands", "regional", "pastel"],
-  }),
-  rasterBasemap({
-    id: "nlmaps-water",
-    name: "nlmaps Water",
-    provider: "nlmaps",
-    category: "Regional",
-    description: "Netherlands water-focused background map.",
-    attribution: "Kaartgegevens &copy; Kadaster",
-    tiles: [
-      "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/water/EPSG:3857/{z}/{x}/{y}.png",
-    ],
-    tags: ["netherlands", "regional", "water"],
-  }),
-  rasterBasemap({
-    id: "nlmaps-luchtfoto",
-    name: "nlmaps Luchtfoto",
-    provider: "nlmaps",
-    category: "Imagery",
-    description: "Netherlands aerial photography.",
-    attribution: "Kaartgegevens &copy; Kadaster",
-    tiles: [
-      "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_ortho25/EPSG:3857/{z}/{x}/{y}.jpeg",
-    ],
-    tags: ["netherlands", "imagery", "aerial"],
   }),
   rasterBasemap({
     id: "openbasiskaart",
@@ -1354,6 +1581,54 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     },
     tags: ["openfreemap", "vector", "style", "3d", "liberty"],
   },
+  protomapsStyleBasemap({
+    id: "protomaps-light",
+    name: "Protomaps Light",
+    styleId: "light",
+    category: "Light",
+    description: "Light Protomaps vector basemap.",
+    tags: ["light"],
+  }),
+  protomapsStyleBasemap({
+    id: "protomaps-dark",
+    name: "Protomaps Dark",
+    styleId: "dark",
+    category: "Dark",
+    description: "Dark Protomaps vector basemap.",
+    tags: ["dark"],
+  }),
+  protomapsStyleBasemap({
+    id: "protomaps-white",
+    name: "Protomaps White",
+    styleId: "white",
+    category: "Light",
+    description: "Minimal white Protomaps basemap for data overlays.",
+    tags: ["white", "minimal", "dataviz"],
+  }),
+  protomapsStyleBasemap({
+    id: "protomaps-black",
+    name: "Protomaps Black",
+    styleId: "black",
+    category: "Dark",
+    description: "Minimal black Protomaps basemap for data overlays.",
+    tags: ["black", "minimal", "dataviz"],
+  }),
+  protomapsStyleBasemap({
+    id: "protomaps-grayscale",
+    name: "Protomaps Grayscale",
+    styleId: "grayscale",
+    category: "Light",
+    description: "Monochrome Protomaps basemap for data overlays.",
+    tags: ["grayscale", "monochrome", "dataviz"],
+  }),
+  protomapsStyleBasemap({
+    id: "protomaps-contrast",
+    name: "Protomaps Contrast",
+    styleId: "contrast",
+    category: "Light",
+    description: "High-contrast Protomaps basemap.",
+    tags: ["contrast", "accessibility"],
+  }),
   mapToolkitStyleBasemap({
     id: "maptoolkit-summer",
     name: "Maptoolkit Summer",

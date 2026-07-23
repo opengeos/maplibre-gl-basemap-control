@@ -73,6 +73,14 @@ const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
     url: 'https://docs.mapbox.com/help/getting-started/access-tokens/',
     label: 'Get a Mapbox access token',
   },
+  protomaps: {
+    url: 'https://protomaps.com/account',
+    label: 'Get a Protomaps API key',
+  },
+  stadia: {
+    url: 'https://client.stadiamaps.com/signup/',
+    label: 'Get a Stadia Maps API key',
+  },
   tomtom: {
     url: 'https://developer.tomtom.com/how-to-get-tomtom-api-key',
     label: 'Get a TomTom API key',
@@ -212,6 +220,8 @@ export class BasemapControl implements IControl {
   private _amazonApiKey = '';
   private _awsRegion = '';
   private _mapboxAccessToken = '';
+  private _protomapsApiKey = '';
+  private _stadiaApiKey = '';
   private _tomtomApiKey = '';
   private _hereApiKey = '';
   private _googleMapsApiKey = '';
@@ -252,6 +262,8 @@ export class BasemapControl implements IControl {
     this._amazonApiKey = options?.amazonApiKey ?? '';
     this._awsRegion = options?.awsRegion ?? 'us-east-1';
     this._mapboxAccessToken = options?.mapboxAccessToken ?? '';
+    this._protomapsApiKey = options?.protomapsApiKey ?? '';
+    this._stadiaApiKey = options?.stadiaApiKey ?? '';
     this._tomtomApiKey = options?.tomtomApiKey ?? '';
     this._hereApiKey = options?.hereApiKey ?? '';
     this._googleMapsApiKey = options?.googleMapsApiKey ?? '';
@@ -400,6 +412,20 @@ export class BasemapControl implements IControl {
 
   setMapboxAccessToken(accessToken: string): void {
     this._mapboxAccessToken = accessToken;
+    this._clearError();
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setProtomapsApiKey(apiKey: string): void {
+    this._protomapsApiKey = apiKey;
+    this._clearError();
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setStadiaApiKey(apiKey: string): void {
+    this._stadiaApiKey = apiKey;
     this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
@@ -1195,6 +1221,40 @@ export class BasemapControl implements IControl {
         ],
       },
       {
+        provider: 'protomaps',
+        label: 'Protomaps',
+        has: this._hasProtomapsBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-protomaps-key',
+            type: 'password',
+            placeholder: 'Protomaps API key',
+            ariaLabel: 'Protomaps API key',
+            value: this._protomapsApiKey,
+            onInput: (value) => {
+              this._protomapsApiKey = value;
+            },
+          },
+        ],
+      },
+      {
+        provider: 'stadia',
+        label: 'Stadia Maps',
+        has: this._hasStadiaBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-stadia-key',
+            type: 'password',
+            placeholder: 'Stadia Maps API key',
+            ariaLabel: 'Stadia Maps API key',
+            value: this._stadiaApiKey,
+            onInput: (value) => {
+              this._stadiaApiKey = value;
+            },
+          },
+        ],
+      },
+      {
         provider: 'tomtom',
         label: 'TomTom',
         has: this._hasTomTomBasemaps(),
@@ -1696,6 +1756,14 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'mapbox');
   }
 
+  private _hasProtomapsBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'protomaps');
+  }
+
+  private _hasStadiaBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'stadia');
+  }
+
   private _hasTomTomBasemaps(): boolean {
     return this._basemaps.some((basemap) => basemap.provider === 'tomtom');
   }
@@ -1723,6 +1791,8 @@ export class BasemapControl implements IControl {
       this._hasMapTilerBasemaps() ||
       this._hasAmazonBasemaps() ||
       this._hasMapboxBasemaps() ||
+      this._hasProtomapsBasemaps() ||
+      this._hasStadiaBasemaps() ||
       this._hasTomTomBasemaps() ||
       this._hasHereBasemaps() ||
       this._hasGoogleApiKeyBasemaps()
@@ -1747,7 +1817,25 @@ export class BasemapControl implements IControl {
       return this._resolveMapboxStyleUrl(url);
     }
 
+    if (basemap.provider === 'protomaps') {
+      return this._resolveProtomapsStyleUrl(url);
+    }
+
     return url;
+  }
+
+  private _resolveProtomapsStyleUrl(url: string): string {
+    if (!url.includes(API_KEY_PLACEHOLDER)) return url;
+
+    const apiKey = this._protomapsApiKey.trim();
+    if (!apiKey) {
+      throw new MissingCredentialError(
+        'Enter a Protomaps API key before applying this basemap.',
+        'protomaps',
+      );
+    }
+
+    return url.split(API_KEY_PLACEHOLDER).join(encodeURIComponent(apiKey));
   }
 
   private _getStyleOptions(basemap: BasemapDefinition): SetStyleOptions | undefined {
@@ -2053,6 +2141,7 @@ export class BasemapControl implements IControl {
   private _rasterApiKeyFor(provider: string): string {
     if (provider === 'tomtom') return this._tomtomApiKey.trim();
     if (provider === 'here') return this._hereApiKey.trim();
+    if (provider === 'stadia') return this._stadiaApiKey.trim();
     if (provider === 'google') return this._googleMapsApiKey.trim();
     return '';
   }
@@ -2091,6 +2180,8 @@ export class BasemapControl implements IControl {
         ? 'TomTom API key'
         : provider === 'here'
           ? 'HERE API key'
+          : provider === 'stadia'
+            ? 'Stadia Maps API key'
           : provider === 'google'
             ? 'Google Maps API key'
             : 'API key';
