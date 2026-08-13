@@ -123,6 +123,13 @@ export interface BasemapControlOptions {
    * in the panel's API keys view.
    */
   stadiaApiKey?: string;
+  /**
+   * Tianditu API key (`tk`), used by the built-in Tianditu basemaps. Register a
+   * free key at https://console.tianditu.gov.cn/api/key. Tianditu is one of the
+   * few basemap services reachable from mainland China, and unlike Amap and
+   * Tencent it publishes in CGCS2000, so WGS84 data overlays without a shift.
+   */
+  tiandituApiKey?: string;
   /** TomTom API key, used by the TomTom Traffic Flow overlays. */
   tomtomApiKey?: string;
   /** HERE API key, used by the HERE Traffic Flow overlay. */

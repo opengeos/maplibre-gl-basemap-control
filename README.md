@@ -9,6 +9,7 @@ A MapLibre GL JS control for searching and switching public basemaps. It keeps t
 
 - Search-first basemap picker inspired by QuickMapServices
 - Built-in catalog for common public basemaps, MapTiler styles, Amazon Location styles, Mapbox styles, Maptoolkit styles, Protomaps styles, and Stadia Maps basemaps
+- Tianditu, Amap, and Tencent basemaps, served from inside mainland China
 - Stackable traffic overlays for TomTom, HERE, Mapbox, and Google
 - Custom basemap and provider definitions
 - MapLibre `IControl` implementation
@@ -156,6 +157,7 @@ const control = new BasemapControl({
   mapboxAccessToken: 'YOUR_MAPBOX_ACCESS_TOKEN',
   protomapsApiKey: 'YOUR_PROTOMAPS_API_KEY',
   stadiaApiKey: 'YOUR_STADIA_MAPS_API_KEY',
+  tiandituApiKey: 'YOUR_TIANDITU_API_KEY',
 });
 ```
 
@@ -202,6 +204,61 @@ transparent overlays, so pair them with `allowMultiple: true` to stack them over
 > **Note.** Stadia also supports keyless access from allowlisted domains (localhost included), but
 > this control always sends `api_key`, so a key is required here. Set `stadiaApiKey` or enter it in
 > the panel's API keys view.
+
+### China Basemaps
+
+Most of the catalog is hosted outside mainland China with no presence inside it, so for users there
+OpenStreetMap, OpenFreeMap, Protomaps, Carto, Google, and Mapbox range from slow to unreachable. The
+catalog ships three providers that are served from inside China:
+
+| Basemap id | Provider | Datum | Credential |
+|------------|----------|-------|------------|
+| `tianditu-vector`, `tianditu-imagery`, `tianditu-terrain` and their `-labels` overlays | Tianditu (天地图) | CGCS2000 | `tiandituApiKey` |
+| `amap-street`, `amap-satellite`, `amap-labels` | Amap (高德地图) | GCJ-02 | none |
+| `tencent-street`, `tencent-dark` | Tencent Maps (腾讯地图) | GCJ-02 | none |
+
+They are searchable by their Chinese names as well as their English ones, so typing `天地图`, `高德`,
+or `腾讯` into the panel's filter finds them.
+
+> **The datum matters more than the speed.** Chinese law requires public map services to publish in
+> GCJ-02, an offset datum that displaces features by roughly 100-700 m from WGS84. Neither this
+> control nor MapLibre applies the shift, so WGS84 data laid over Amap or Tencent will visibly
+> misalign. **Tianditu is the exception**: it publishes in CGCS2000, which is close enough to WGS84
+> for web mapping, so ordinary data overlays correctly. Prefer Tianditu whenever you are also
+> rendering your own data; reach for Amap or Tencent when the basemap is the whole point, or convert
+> your data to GCJ-02 first.
+
+Tianditu is China's official National Platform for Common Geospatial Information Services. Register
+a free key at [console.tianditu.gov.cn](https://console.tianditu.gov.cn/api/key), then set
+`tiandituApiKey` or enter it in the panel's API keys view. Its layers ride the `DataServer`
+endpoint, the xyz-shaped form of its WMTS services:
+
+```text
+https://t{0-7}.tianditu.gov.cn/DataServer?T={layer}&x={x}&y={y}&l={z}&tk={api-key}
+```
+
+Tianditu splits every basemap from its labels, so the `-labels` overlays are separate transparent
+layers. Pair them with `allowMultiple: true` to stack them over their base:
+
+```typescript
+const control = new BasemapControl({
+  allowMultiple: true,
+  tiandituApiKey: 'YOUR_TIANDITU_API_KEY',
+  defaultBasemapId: 'tianditu-vector',
+});
+await control.addBasemap('tianditu-vector-labels');
+```
+
+The same applies to `amap-labels`, a transparent roads-and-labels overlay meant to sit on top of
+`amap-satellite`. Note that `tianditu-terrain` and `tianditu-terrain-labels` are only published to
+zoom 14, where the vector and imagery layers reach 18, and Amap serves a "no imagery" placeholder
+rather than a 404 past zoom 18, so `amap-satellite` caps there and lets MapLibre overzoom.
+
+> **Terms of use.** Tianditu's key-based access is the sanctioned route and the one to build on. The
+> Amap and Tencent tile endpoints are widely used but are not documented public APIs, and carry the
+> same caveat as the keyless Google tiles below: fine for development and demos, but the operators
+> may rate-limit, change, or block them at any time. Obtain a commercial key from the provider before
+> shipping either one.
 
 ### Traffic Overlays
 
@@ -302,6 +359,7 @@ API key and load straight from `https://styles.maptoolkit.org/{styleId}.json`:
 | `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles and the Mapbox Traffic overlay |
 | `protomapsApiKey` | `string` | `undefined` | Initial Protomaps API key for built-in Protomaps styles |
 | `stadiaApiKey` | `string` | `undefined` | Initial Stadia Maps API key for built-in Stadia and Stadia x Stamen basemaps |
+| `tiandituApiKey` | `string` | `undefined` | Initial Tianditu API key (`tk`) for the built-in Tianditu basemaps |
 | `tomtomApiKey` | `string` | `undefined` | Initial TomTom API key for the TomTom Traffic overlays |
 | `hereApiKey` | `string` | `undefined` | Initial HERE API key for the HERE Traffic overlay |
 | `googleMapsApiKey` | `string` | `undefined` | Initial Google Maps API key (Map Tiles API) for the Google Traffic overlay and the base Google Maps/Satellite/Terrain/Hybrid basemaps (which fall back to keyless tiles without a key) |
@@ -370,6 +428,7 @@ const control = new BasemapControl({
 - `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
 - `setProtomapsApiKey(apiKey)` - Set or update the Protomaps API key used by Protomaps styles
 - `setStadiaApiKey(apiKey)` - Set or update the Stadia Maps API key used by Stadia basemaps
+- `setTiandituApiKey(apiKey)` - Set or update the Tianditu API key used by Tianditu basemaps
 - `setTomTomApiKey(apiKey)` - Set or update the TomTom API key used by TomTom Traffic overlays
 - `setHereApiKey(apiKey)` - Set or update the HERE API key used by the HERE Traffic overlay
 - `setGoogleMapsApiKey(apiKey)` - Set or update the Google Maps API key used by the Google Traffic overlay and the base Google basemaps

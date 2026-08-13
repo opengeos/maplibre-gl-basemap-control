@@ -81,6 +81,10 @@ const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
     url: 'https://client.stadiamaps.com/signup/',
     label: 'Get a Stadia Maps API key',
   },
+  tianditu: {
+    url: 'https://console.tianditu.gov.cn/api/key',
+    label: 'Get a Tianditu API key',
+  },
   tomtom: {
     url: 'https://developer.tomtom.com/how-to-get-tomtom-api-key',
     label: 'Get a TomTom API key',
@@ -93,6 +97,17 @@ const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
     url: 'https://developers.google.com/maps/documentation/tile/get-api-key',
     label: 'Get a Google Maps API key',
   },
+};
+
+// What to call each provider's credential in the "Enter a ... before applying
+// this layer." message raised when a raster basemap's `{api-key}` cannot be
+// substituted. Providers absent here fall back to a generic "API key".
+const RASTER_KEY_LABELS: Record<string, string> = {
+  google: 'Google Maps API key',
+  here: 'HERE API key',
+  stadia: 'Stadia Maps API key',
+  tianditu: 'Tianditu API key',
+  tomtom: 'TomTom API key',
 };
 
 // How long after a credentialed provider's style descriptor loads the control
@@ -222,6 +237,7 @@ export class BasemapControl implements IControl {
   private _mapboxAccessToken = '';
   private _protomapsApiKey = '';
   private _stadiaApiKey = '';
+  private _tiandituApiKey = '';
   private _tomtomApiKey = '';
   private _hereApiKey = '';
   private _googleMapsApiKey = '';
@@ -264,6 +280,7 @@ export class BasemapControl implements IControl {
     this._mapboxAccessToken = options?.mapboxAccessToken ?? '';
     this._protomapsApiKey = options?.protomapsApiKey ?? '';
     this._stadiaApiKey = options?.stadiaApiKey ?? '';
+    this._tiandituApiKey = options?.tiandituApiKey ?? '';
     this._tomtomApiKey = options?.tomtomApiKey ?? '';
     this._hereApiKey = options?.hereApiKey ?? '';
     this._googleMapsApiKey = options?.googleMapsApiKey ?? '';
@@ -426,6 +443,13 @@ export class BasemapControl implements IControl {
 
   setStadiaApiKey(apiKey: string): void {
     this._stadiaApiKey = apiKey;
+    this._clearError();
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setTiandituApiKey(apiKey: string): void {
+    this._tiandituApiKey = apiKey;
     this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
@@ -1255,6 +1279,23 @@ export class BasemapControl implements IControl {
         ],
       },
       {
+        provider: 'tianditu',
+        label: 'Tianditu',
+        has: this._hasTiandituBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-tianditu-key',
+            type: 'password',
+            placeholder: 'Tianditu API key',
+            ariaLabel: 'Tianditu API key',
+            value: this._tiandituApiKey,
+            onInput: (value) => {
+              this._tiandituApiKey = value;
+            },
+          },
+        ],
+      },
+      {
         provider: 'tomtom',
         label: 'TomTom',
         has: this._hasTomTomBasemaps(),
@@ -1764,6 +1805,10 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'stadia');
   }
 
+  private _hasTiandituBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'tianditu');
+  }
+
   private _hasTomTomBasemaps(): boolean {
     return this._basemaps.some((basemap) => basemap.provider === 'tomtom');
   }
@@ -1793,6 +1838,7 @@ export class BasemapControl implements IControl {
       this._hasMapboxBasemaps() ||
       this._hasProtomapsBasemaps() ||
       this._hasStadiaBasemaps() ||
+      this._hasTiandituBasemaps() ||
       this._hasTomTomBasemaps() ||
       this._hasHereBasemaps() ||
       this._hasGoogleApiKeyBasemaps()
@@ -2142,6 +2188,7 @@ export class BasemapControl implements IControl {
     if (provider === 'tomtom') return this._tomtomApiKey.trim();
     if (provider === 'here') return this._hereApiKey.trim();
     if (provider === 'stadia') return this._stadiaApiKey.trim();
+    if (provider === 'tianditu') return this._tiandituApiKey.trim();
     if (provider === 'google') return this._googleMapsApiKey.trim();
     return '';
   }
@@ -2175,16 +2222,7 @@ export class BasemapControl implements IControl {
   }
 
   private _missingRasterKeyError(provider: string): MissingCredentialError {
-    const label =
-      provider === 'tomtom'
-        ? 'TomTom API key'
-        : provider === 'here'
-          ? 'HERE API key'
-          : provider === 'stadia'
-            ? 'Stadia Maps API key'
-          : provider === 'google'
-            ? 'Google Maps API key'
-            : 'API key';
+    const label = RASTER_KEY_LABELS[provider] ?? 'API key';
     const helpProvider = (
       provider in PROVIDER_CREDENTIAL_HELP ? provider : 'maptiler'
     ) as keyof typeof PROVIDER_CREDENTIAL_HELP;
