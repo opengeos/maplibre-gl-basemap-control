@@ -282,6 +282,125 @@ describe("basemap catalog", () => {
     );
   });
 
+  it("includes Tianditu layers with API key placeholders on every host", () => {
+    const catalog = createBasemapCatalog();
+    const tianditu = catalog.filter(
+      (basemap) => basemap.provider === "tianditu",
+    );
+    const tiles = (id: string): string[] => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      expect(basemap?.provider).toBe("tianditu");
+      return basemap?.source.type === "raster" ? basemap.source.tiles : [];
+    };
+
+    const cases: Array<[string, string, number]> = [
+      ["tianditu-vector", "vec_w", 18],
+      ["tianditu-vector-labels", "cva_w", 18],
+      ["tianditu-imagery", "img_w", 18],
+      ["tianditu-imagery-labels", "cia_w", 18],
+      // The terrain pair stops at 14 where the vector and imagery layers reach 18.
+      ["tianditu-terrain", "ter_w", 14],
+      ["tianditu-terrain-labels", "cta_w", 14],
+    ];
+
+    for (const [id, layer, maxzoom] of cases) {
+      const hosts = tiles(id);
+      expect(hosts, `${id} should shard across t0..t7`).toHaveLength(8);
+      hosts.forEach((tile, index) => {
+        expect(tile).toBe(
+          `https://t${index}.tianditu.gov.cn/DataServer?T=${layer}&x={x}&y={y}&l={z}&tk={api-key}`,
+        );
+      });
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(
+        basemap?.source.type === "raster" ? basemap.source.maxzoom : undefined,
+      ).toBe(maxzoom);
+    }
+
+    expect(tianditu).toHaveLength(cases.length);
+    for (const basemap of tianditu) {
+      expect(basemap.attribution).toContain("Tianditu");
+      // Tianditu publishes in CGCS2000, so it must not carry the GCJ-02 warning
+      // that Amap and Tencent do.
+      expect(basemap.description).not.toContain("GCJ-02");
+    }
+    expect(DEFAULT_BASEMAP_PROVIDERS.map((provider) => provider.id)).toContain(
+      "tianditu",
+    );
+  });
+
+  it("includes keyless Amap and Tencent basemaps flagged as GCJ-02", () => {
+    const catalog = createBasemapCatalog();
+    const raster = (id: string) => {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(basemap, `missing ${id}`).toBeDefined();
+      return basemap?.source.type === "raster" ? basemap.source : undefined;
+    };
+
+    expect(raster("amap-street")?.tiles).toEqual([
+      "https://wprd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scl=1&style=7&x={x}&y={y}&z={z}",
+      "https://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scl=1&style=7&x={x}&y={y}&z={z}",
+      "https://wprd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scl=1&style=7&x={x}&y={y}&z={z}",
+      "https://wprd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scl=1&style=7&x={x}&y={y}&z={z}",
+    ]);
+    expect(raster("amap-satellite")?.tiles[0]).toBe(
+      "https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}",
+    );
+    // Amap serves a "no imagery" placeholder rather than a 404 past zoom 18.
+    expect(raster("amap-satellite")?.maxzoom).toBe(18);
+    expect(raster("amap-labels")?.tiles[0]).toBe(
+      "https://webst01.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}",
+    );
+
+    // Tencent numbers rows from the bottom, so its sources must be TMS.
+    expect(raster("tencent-street")?.tiles).toEqual([
+      "https://rt0.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=1&scene=0",
+      "https://rt1.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=1&scene=0",
+      "https://rt2.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=1&scene=0",
+      "https://rt3.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=1&scene=0",
+    ]);
+    expect(raster("tencent-street")?.scheme).toBe("tms");
+    expect(raster("tencent-dark")?.scheme).toBe("tms");
+    expect(raster("tencent-dark")?.tiles[0]).toContain("styleid=4");
+    expect(catalog.find((b) => b.id === "tencent-dark")?.category).toBe("Dark");
+
+    // None of these take a key, so none may carry the substitution placeholder
+    // that would make the control demand one.
+    for (const id of [
+      "amap-street",
+      "amap-satellite",
+      "amap-labels",
+      "tencent-street",
+      "tencent-dark",
+    ]) {
+      const basemap = catalog.find((entry) => entry.id === id);
+      expect(raster(id)?.tiles.join(" ")).not.toContain("{api-key}");
+      // The offset datum silently misplaces WGS84 overlays, so every one of
+      // these must say so.
+      expect(basemap?.description).toContain("GCJ-02");
+    }
+
+    const providerIds = DEFAULT_BASEMAP_PROVIDERS.map(
+      (provider) => provider.id,
+    );
+    expect(providerIds).toContain("amap");
+    expect(providerIds).toContain("tencent");
+  });
+
+  it("finds the China basemaps by their Chinese names", () => {
+    const catalog = createBasemapCatalog();
+
+    expect(filterBasemaps(catalog, { query: "天地图" }).length).toBe(6);
+    expect(
+      filterBasemaps(catalog, { query: "高德" }).map((item) => item.id),
+    ).toEqual(["amap-street", "amap-satellite", "amap-labels"]);
+    expect(
+      filterBasemaps(catalog, { query: "腾讯" }).map((item) => item.id),
+    ).toEqual(["tencent-street", "tencent-dark"]);
+    expect(filterBasemaps(catalog, { query: "china" }).length).toBe(11);
+  });
+
   it("includes the additional OpenRailwayMap, USGS, and Esri layers", () => {
     const catalog = createBasemapCatalog();
     const tileUrl = (id: string, provider: string): string => {

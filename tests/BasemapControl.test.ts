@@ -727,6 +727,67 @@ describe('BasemapControl', () => {
     );
   });
 
+  it('requires an API key before applying Tianditu basemaps', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ collapsed: false });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('tianditu-vector')).rejects.toThrow(
+      'Enter a Tianditu API key before applying this layer.',
+    );
+  });
+
+  it('substitutes the Tianditu API key into every host template', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ tiandituApiKey: 'td key' });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('tianditu-imagery');
+
+    const tiles = lastSourceFor(map, 'tianditu-imagery')?.tiles ?? [];
+    expect(tiles).toHaveLength(8);
+    expect(tiles[0]).toBe(
+      'https://t0.tianditu.gov.cn/DataServer?T=img_w&x={x}&y={y}&l={z}&tk=td%20key',
+    );
+    expect(tiles[7]).toBe(
+      'https://t7.tianditu.gov.cn/DataServer?T=img_w&x={x}&y={y}&l={z}&tk=td%20key',
+    );
+  });
+
+  it('applies a Tianditu key set after the failed attempt', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({});
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('tianditu-vector')).rejects.toThrow(
+      'Enter a Tianditu API key before applying this layer.',
+    );
+
+    control.setTiandituApiKey('later-key');
+    await control.setBasemap('tianditu-vector');
+
+    expect(lastSourceFor(map, 'tianditu-vector')?.tiles?.[0]).toBe(
+      'https://t0.tianditu.gov.cn/DataServer?T=vec_w&x={x}&y={y}&l={z}&tk=later-key',
+    );
+  });
+
+  it('applies keyless Amap and Tencent basemaps, preserving the TMS scheme', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({});
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await control.setBasemap('amap-street');
+    expect(lastSourceFor(map, 'amap-street')?.tiles?.[0]).toBe(
+      'https://wprd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scl=1&style=7&x={x}&y={y}&z={z}',
+    );
+    expect(lastSourceFor(map, 'amap-street')?.scheme).toBeUndefined();
+
+    await control.setBasemap('tencent-street');
+    expect(lastSourceFor(map, 'tencent-street')?.scheme).toBe('tms');
+  });
+
   it('requires an API key before applying Protomaps styles', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({ collapsed: false });

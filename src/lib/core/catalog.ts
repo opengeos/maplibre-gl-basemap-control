@@ -5,6 +5,7 @@ import type {
 } from "./types";
 
 export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
+  { id: "amap", name: "Amap", category: "Regional" },
   { id: "amazon", name: "Amazon Location", category: "General" },
   { id: "carto", name: "Carto", category: "General" },
   { id: "cyclosm", name: "CyclOSM", category: "Cycling" },
@@ -24,6 +25,8 @@ export const DEFAULT_BASEMAP_PROVIDERS: BasemapProvider[] = [
   { id: "protomaps", name: "Protomaps", category: "Vector Styles" },
   { id: "stadia", name: "Stadia Maps", category: "General" },
   { id: "swisstopo", name: "Swiss Federal Geoportal", category: "Regional" },
+  { id: "tencent", name: "Tencent Maps", category: "Regional" },
+  { id: "tianditu", name: "Tianditu", category: "Regional" },
   { id: "tomtom", name: "TomTom", category: "Traffic" },
   { id: "topplusopen", name: "TopPlusOpen", category: "Regional" },
   { id: "usgs", name: "USGS", category: "United States" },
@@ -39,10 +42,12 @@ function rasterBasemap({
   attribution,
   tiles,
   maxzoom = 19,
+  scheme,
   tags = [],
 }: Omit<BasemapDefinition, "type" | "source"> & {
   tiles: string[];
   maxzoom?: number;
+  scheme?: "xyz" | "tms";
 }): BasemapDefinition {
   return {
     id,
@@ -57,6 +62,7 @@ function rasterBasemap({
       tiles,
       tileSize: 256,
       maxzoom,
+      scheme,
     },
     tags,
   };
@@ -269,6 +275,61 @@ function stadiaRasterBasemap({
   });
 }
 
+// Tianditu serves the same tiles from t0..t7. Browsers multiplex over HTTP/2 so
+// the sharding no longer buys throughput, but spreading requests keeps any one
+// host from tripping the per-host rate limit on a free key.
+const TIANDITU_HOSTS = [0, 1, 2, 3, 4, 5, 6, 7];
+
+// Tianditu's DataServer endpoint, the xyz-shaped form of its WMTS services.
+// `T` names the layer (`vec_w` vector, `img_w` imagery, `ter_w` terrain, and the
+// `c*_w` annotation overlays that carry their labels), and `tk` is the free API
+// key from tianditu.gov.cn, which rides on the URL like TomTom's and HERE's, so
+// the standard `{api-key}` raster substitution covers it. The layers are
+// published in CGCS2000 on the Web Mercator grid, so `{z}/{x}/{y}` maps
+// directly onto `l`/`x`/`y`.
+function tiandituRasterBasemap({
+  id,
+  name,
+  layer,
+  category,
+  description,
+  maxzoom = 18,
+  tags = [],
+}: {
+  id: string;
+  name: string;
+  layer: string;
+  category: string;
+  description: string;
+  maxzoom?: number;
+  tags?: string[];
+}): BasemapDefinition {
+  return rasterBasemap({
+    id,
+    name,
+    provider: "tianditu",
+    category,
+    description,
+    attribution: TIANDITU_ATTRIBUTION,
+    tiles: TIANDITU_HOSTS.map(
+      (host) =>
+        `https://t${host}.tianditu.gov.cn/DataServer?T=${layer}&x={x}&y={y}&l={z}&tk={api-key}`,
+    ),
+    maxzoom,
+    tags: ["tianditu", "china", "天地图", ...tags],
+  });
+}
+
+// Amap serves each product from four numbered hosts (`wprd01`..`wprd04` for the
+// street map, `webst01`..`webst04` for imagery and the label overlay). `style`
+// selects the product: 7 street, 6 imagery, 8 roads-and-labels.
+function amapTiles(host: "wprd" | "webst", query: string): string[] {
+  return [1, 2, 3, 4].map(
+    (index) =>
+      `https://${host}0${index}.is.autonavi.com/appmaptile?${query}&x={x}&y={y}&z={z}`,
+  );
+}
+
 function sortProviders(providers: BasemapProvider[]): BasemapProvider[] {
   return [...providers].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -293,6 +354,22 @@ const PROTOMAPS_ATTRIBUTION =
   '<a href="https://protomaps.com" target="_blank" rel="noopener">Protomaps</a> &copy; <a href="https://openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>';
 const OPENFREEMAP_ATTRIBUTION =
   "OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap";
+const TIANDITU_ATTRIBUTION =
+  '&copy; <a href="https://www.tianditu.gov.cn" target="_blank" rel="noopener">天地图 Tianditu</a> (National Platform for Common Geospatial Information Services)';
+const AMAP_ATTRIBUTION =
+  '&copy; <a href="https://www.amap.com" target="_blank" rel="noopener">高德地图 Amap</a>';
+const TENCENT_ATTRIBUTION =
+  '&copy; <a href="https://map.qq.com" target="_blank" rel="noopener">腾讯地图 Tencent Maps</a>';
+
+// Amap and Tencent tiles are drawn in GCJ-02 ("Mars coordinates"), the offset
+// datum Chinese law mandates for public map services. WGS84 data overlaid on
+// them lands roughly 100-700 m off, and neither this control nor MapLibre
+// applies the shift, so every affected basemap says so in its description.
+// Tianditu is the exception: it publishes in CGCS2000, which is close enough to
+// WGS84 for web mapping, so ordinary data aligns without conversion.
+const GCJ02_WARNING =
+  "Tiles are in the GCJ-02 datum, so WGS84 data overlaid on them appears offset by roughly 100-700 m.";
+
 const TOMTOM_ATTRIBUTION = "&copy; TomTom";
 const HERE_ATTRIBUTION = "&copy; HERE";
 const GOOGLE_ATTRIBUTION = "&copy; Google";
@@ -1343,6 +1420,138 @@ export const DEFAULT_BASEMAPS: BasemapDefinition[] = [
     ],
     maxzoom: 18,
     tags: ["switzerland", "imagery"],
+  }),
+  tiandituRasterBasemap({
+    id: "tianditu-vector",
+    name: "Tianditu Vector",
+    layer: "vec_w",
+    category: "Regional",
+    description:
+      "China's official street map, reachable from mainland China. Published in CGCS2000, so WGS84 data overlays without a datum shift. Pair with Tianditu Vector Labels. Requires a free Tianditu API key.",
+    tags: ["vector", "street", "vec"],
+  }),
+  tiandituRasterBasemap({
+    id: "tianditu-vector-labels",
+    name: "Tianditu Vector Labels",
+    layer: "cva_w",
+    category: "Labels",
+    description:
+      "Place name and road label overlay for Tianditu Vector. Requires a free Tianditu API key.",
+    tags: ["labels", "annotation", "overlay", "cva"],
+  }),
+  tiandituRasterBasemap({
+    id: "tianditu-imagery",
+    name: "Tianditu Imagery",
+    layer: "img_w",
+    category: "Imagery",
+    description:
+      "China's official satellite imagery, reachable from mainland China. Pair with Tianditu Imagery Labels. Requires a free Tianditu API key.",
+    tags: ["imagery", "satellite", "img"],
+  }),
+  tiandituRasterBasemap({
+    id: "tianditu-imagery-labels",
+    name: "Tianditu Imagery Labels",
+    layer: "cia_w",
+    category: "Labels",
+    description:
+      "Place name and road label overlay for Tianditu Imagery. Requires a free Tianditu API key.",
+    tags: ["labels", "annotation", "overlay", "cia"],
+  }),
+  tiandituRasterBasemap({
+    id: "tianditu-terrain",
+    name: "Tianditu Terrain",
+    layer: "ter_w",
+    category: "Terrain",
+    description:
+      "China's official shaded relief terrain map. Pair with Tianditu Terrain Labels. Requires a free Tianditu API key.",
+    // The terrain pair is only published to zoom 14, unlike the vector and
+    // imagery layers, which reach 18.
+    maxzoom: 14,
+    tags: ["terrain", "relief", "hillshade", "ter"],
+  }),
+  tiandituRasterBasemap({
+    id: "tianditu-terrain-labels",
+    name: "Tianditu Terrain Labels",
+    layer: "cta_w",
+    category: "Labels",
+    description:
+      "Place name label overlay for Tianditu Terrain. Requires a free Tianditu API key.",
+    maxzoom: 14,
+    tags: ["labels", "annotation", "overlay", "cta"],
+  }),
+  rasterBasemap({
+    id: "amap-street",
+    name: "Amap Street",
+    provider: "amap",
+    category: "Regional",
+    description: `Amap street map of China, reachable from mainland China. ${GCJ02_WARNING}`,
+    attribution: AMAP_ATTRIBUTION,
+    tiles: amapTiles("wprd", "lang=zh_cn&size=1&scl=1&style=7"),
+    tags: ["amap", "gaode", "高德", "china", "street", "gcj02"],
+  }),
+  rasterBasemap({
+    id: "amap-satellite",
+    name: "Amap Satellite",
+    provider: "amap",
+    category: "Imagery",
+    description: `Amap satellite imagery, reachable from mainland China. Pair with Amap Labels. ${GCJ02_WARNING}`,
+    attribution: AMAP_ATTRIBUTION,
+    tiles: amapTiles("webst", "style=6"),
+    // Past zoom 18 Amap returns a "no imagery" placeholder tile rather than a
+    // 404, so cap here and let MapLibre overzoom instead.
+    maxzoom: 18,
+    tags: ["amap", "gaode", "高德", "china", "satellite", "imagery", "gcj02"],
+  }),
+  rasterBasemap({
+    id: "amap-labels",
+    name: "Amap Labels",
+    provider: "amap",
+    category: "Labels",
+    description: `Transparent Amap road and label overlay, for use over Amap Satellite. ${GCJ02_WARNING}`,
+    attribution: AMAP_ATTRIBUTION,
+    tiles: amapTiles("webst", "style=8"),
+    tags: [
+      "amap",
+      "gaode",
+      "高德",
+      "china",
+      "labels",
+      "roads",
+      "overlay",
+      "gcj02",
+    ],
+  }),
+  rasterBasemap({
+    id: "tencent-street",
+    name: "Tencent Street",
+    provider: "tencent",
+    category: "Regional",
+    description: `Tencent street map of China, reachable from mainland China. ${GCJ02_WARNING}`,
+    attribution: TENCENT_ATTRIBUTION,
+    // Tencent numbers tile rows from the bottom, so the source is TMS rather
+    // than xyz; MapLibre flips `{y}` when `scheme` says so.
+    tiles: [0, 1, 2, 3].map(
+      (host) =>
+        `https://rt${host}.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=1&scene=0`,
+    ),
+    maxzoom: 18,
+    scheme: "tms",
+    tags: ["tencent", "qq", "腾讯", "china", "street", "gcj02"],
+  }),
+  rasterBasemap({
+    id: "tencent-dark",
+    name: "Tencent Dark",
+    provider: "tencent",
+    category: "Dark",
+    description: `Dark Tencent street map for high-contrast overlays, reachable from mainland China. ${GCJ02_WARNING}`,
+    attribution: TENCENT_ATTRIBUTION,
+    tiles: [0, 1, 2, 3].map(
+      (host) =>
+        `https://rt${host}.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=4&scene=0`,
+    ),
+    maxzoom: 18,
+    scheme: "tms",
+    tags: ["tencent", "qq", "腾讯", "china", "dark", "gcj02"],
   }),
   rasterBasemap({
     id: "topplusopen-color",
