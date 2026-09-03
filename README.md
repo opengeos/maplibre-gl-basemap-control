@@ -152,6 +152,7 @@ destructive style change, so the missing key can be entered and the basemap retr
 const control = new BasemapControl({
   defaultBasemapId: 'maptiler-streets',
   mapTilerApiKey: 'YOUR_MAPTILER_API_KEY',
+  cartoApiKey: 'YOUR_CARTO_API_KEY',
   amazonApiKey: 'YOUR_AMAZON_LOCATION_API_KEY',
   awsRegion: 'us-east-1',
   mapboxAccessToken: 'YOUR_MAPBOX_ACCESS_TOKEN',
@@ -354,6 +355,7 @@ API key and load straight from `https://styles.maptoolkit.org/{styleId}.json`:
 | `panelWidth` | `number` | `340` | Floating panel width in pixels |
 | `className` | `string` | `''` | Extra class for the control button container |
 | `mapTilerApiKey` | `string` | `undefined` | Initial MapTiler API key for built-in MapTiler styles |
+| `cartoApiKey` | `string` | `undefined` | Initial CARTO API key for built-in CARTO raster basemaps |
 | `amazonApiKey` | `string` | `undefined` | Initial Amazon Location API key for built-in Amazon styles |
 | `awsRegion` | `string` | `'us-east-1'` | AWS region for built-in Amazon Location styles |
 | `mapboxAccessToken` | `string` | `undefined` | Initial Mapbox access token for built-in Mapbox styles and the Mapbox Traffic overlay |
@@ -424,6 +426,7 @@ const control = new BasemapControl({
 - `toggleBasemap(id)` - Add the raster basemap if inactive, otherwise remove it
 - `isBasemapActive(id)` - Whether the basemap is currently active
 - `setMapTilerApiKey(apiKey)` - Set or update the MapTiler API key used by MapTiler styles
+- `setCartoApiKey(apiKey)` - Set or update the CARTO API key used by CARTO raster basemaps
 - `setAmazonCredentials(apiKey, awsRegion)` - Set or update Amazon Location credentials
 - `setMapboxAccessToken(accessToken)` - Set or update the Mapbox access token
 - `setProtomapsApiKey(apiKey)` - Set or update the Protomaps API key used by Protomaps styles
