@@ -4,13 +4,13 @@ import type {
   Map as MapLibreMap,
   SourceSpecification,
   StyleSpecification,
-} from "maplibre-gl";
+} from 'maplibre-gl';
 import {
   createBasemapCatalog,
   filterBasemaps,
   getBasemapCategories,
   resolveBasemapProviders,
-} from "./catalog";
+} from './catalog';
 import type {
   BasemapControlEvent,
   BasemapControlEventHandler,
@@ -22,98 +22,97 @@ import type {
   GoogleSessionConfig,
   ManagedRasterBasemap,
   VectorOverlayBasemapSource,
-} from "./types";
+} from './types';
 
 const DEFAULT_OPTIONS: Required<
   Pick<
     BasemapControlOptions,
-    | "collapsed"
-    | "position"
-    | "title"
-    | "panelWidth"
-    | "className"
-    | "includeDefaultBasemaps"
-    | "allowMultiple"
-    | "showMultipleToggle"
-    | "resizable"
+    | 'collapsed'
+    | 'position'
+    | 'title'
+    | 'panelWidth'
+    | 'className'
+    | 'includeDefaultBasemaps'
+    | 'allowMultiple'
+    | 'showMultipleToggle'
+    | 'resizable'
   >
 > = {
   collapsed: true,
-  position: "top-right",
-  title: "Basemaps",
+  position: 'top-right',
+  title: 'Basemaps',
   panelWidth: 340,
-  className: "",
+  className: '',
   includeDefaultBasemaps: true,
   allowMultiple: false,
   showMultipleToggle: true,
   resizable: true,
 };
 
-const CONTROL_SOURCE_PREFIX = "maplibre-basemap-control-source";
-const CONTROL_LAYER_PREFIX = "";
-const API_KEY_PLACEHOLDER = "{api-key}";
-const MAPTILER_API_KEY_EXAMPLE = "YOUR_MAPTILER_API_KEY";
-const MAPTILER_API_KEY_QUERY = "?key";
-const MAPTILER_API_KEY_EMPTY_QUERY = "?key=";
-const AWS_REGION_PLACEHOLDER = "{aws-region}";
+const CONTROL_SOURCE_PREFIX = 'maplibre-basemap-control-source';
+const CONTROL_LAYER_PREFIX = '';
+const API_KEY_PLACEHOLDER = '{api-key}';
+const MAPTILER_API_KEY_EXAMPLE = 'YOUR_MAPTILER_API_KEY';
+const MAPTILER_API_KEY_QUERY = '?key';
+const MAPTILER_API_KEY_EMPTY_QUERY = '?key=';
+const AWS_REGION_PLACEHOLDER = '{aws-region}';
 
 // Where users can obtain the credentials each provider requires. Surfaced as a
 // "Get a ..." link beside a missing-credential error so the message points at a
 // concrete next step instead of dead-ending.
-const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
-  {
-    carto: {
-      url: "https://carto.com/basemaps/apikey/",
-      label: "Get a CARTO API key",
-    },
-    amazon: {
-      url: "https://docs.aws.amazon.com/location/latest/developerguide/using-apikeys.html",
-      label: "Get an Amazon API key",
-    },
-    maptiler: {
-      url: "https://cloud.maptiler.com/account/keys/",
-      label: "Get a MapTiler API key",
-    },
-    mapbox: {
-      url: "https://docs.mapbox.com/help/getting-started/access-tokens/",
-      label: "Get a Mapbox access token",
-    },
-    protomaps: {
-      url: "https://protomaps.com/account",
-      label: "Get a Protomaps API key",
-    },
-    stadia: {
-      url: "https://client.stadiamaps.com/signup/",
-      label: "Get a Stadia Maps API key",
-    },
-    tianditu: {
-      url: "https://console.tianditu.gov.cn/api/key",
-      label: "Get a Tianditu API key",
-    },
-    tomtom: {
-      url: "https://developer.tomtom.com/how-to-get-tomtom-api-key",
-      label: "Get a TomTom API key",
-    },
-    here: {
-      url: "https://www.here.com/get-started/pricing",
-      label: "Get a HERE API key",
-    },
-    google: {
-      url: "https://developers.google.com/maps/documentation/tile/get-api-key",
-      label: "Get a Google Maps API key",
-    },
-  };
+const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> = {
+  carto: {
+    url: 'https://carto.com/basemaps/apikey/',
+    label: 'Get a CARTO API key',
+  },
+  amazon: {
+    url: 'https://docs.aws.amazon.com/location/latest/developerguide/using-apikeys.html',
+    label: 'Get an Amazon API key',
+  },
+  maptiler: {
+    url: 'https://cloud.maptiler.com/account/keys/',
+    label: 'Get a MapTiler API key',
+  },
+  mapbox: {
+    url: 'https://docs.mapbox.com/help/getting-started/access-tokens/',
+    label: 'Get a Mapbox access token',
+  },
+  protomaps: {
+    url: 'https://protomaps.com/account',
+    label: 'Get a Protomaps API key',
+  },
+  stadia: {
+    url: 'https://client.stadiamaps.com/signup/',
+    label: 'Get a Stadia Maps API key',
+  },
+  tianditu: {
+    url: 'https://console.tianditu.gov.cn/api/key',
+    label: 'Get a Tianditu API key',
+  },
+  tomtom: {
+    url: 'https://developer.tomtom.com/how-to-get-tomtom-api-key',
+    label: 'Get a TomTom API key',
+  },
+  here: {
+    url: 'https://www.here.com/get-started/pricing',
+    label: 'Get a HERE API key',
+  },
+  google: {
+    url: 'https://developers.google.com/maps/documentation/tile/get-api-key',
+    label: 'Get a Google Maps API key',
+  },
+};
 
 // What to call each provider's credential in the "Enter a ... before applying
 // this layer." message raised when a raster basemap's `{api-key}` cannot be
 // substituted. Providers absent here fall back to a generic "API key".
 const RASTER_KEY_LABELS: Record<string, string> = {
-  carto: "CARTO API key",
-  google: "Google Maps API key",
-  here: "HERE API key",
-  stadia: "Stadia Maps API key",
-  tianditu: "Tianditu API key",
-  tomtom: "TomTom API key",
+  carto: 'CARTO API key',
+  google: 'Google Maps API key',
+  here: 'HERE API key',
+  stadia: 'Stadia Maps API key',
+  tianditu: 'Tianditu API key',
+  tomtom: 'TomTom API key',
 };
 
 // How long after a credentialed provider's style descriptor loads the control
@@ -134,7 +133,7 @@ class MissingCredentialError extends Error {
 
   constructor(message: string, provider: string) {
     super(message);
-    this.name = "MissingCredentialError";
+    this.name = 'MissingCredentialError';
     this.provider = provider;
   }
 }
@@ -150,7 +149,7 @@ class BasemapLoadError extends Error {
 
   constructor(message: string, provider: string, status?: number) {
     super(message);
-    this.name = "BasemapLoadError";
+    this.name = 'BasemapLoadError';
     this.provider = provider;
     this.status = status;
   }
@@ -161,17 +160,17 @@ class BasemapLoadError extends Error {
 // request URL. Pull it out defensively so a style-load failure can be matched
 // to the exact style URL the control applied.
 function extractErrorUrl(error: unknown): string | undefined {
-  if (error && typeof error === "object" && "url" in error) {
+  if (error && typeof error === 'object' && 'url' in error) {
     const url = (error as { url?: unknown }).url;
-    if (typeof url === "string") return url;
+    if (typeof url === 'string') return url;
   }
   return undefined;
 }
 
 function extractErrorStatus(error: unknown): number | undefined {
-  if (error && typeof error === "object" && "status" in error) {
+  if (error && typeof error === 'object' && 'status' in error) {
     const status = (error as { status?: unknown }).status;
-    if (typeof status === "number" && status > 0) return status;
+    if (typeof status === 'number' && status > 0) return status;
   }
   return undefined;
 }
@@ -183,11 +182,8 @@ interface ResizeAnchor {
   isTop: boolean;
 }
 
-type EventHandlersMap = globalThis.Map<
-  BasemapControlEvent,
-  Set<BasemapControlEventHandler>
->;
-type SetStyleOptions = NonNullable<Parameters<MapLibreMap["setStyle"]>[1]>;
+type EventHandlersMap = globalThis.Map<BasemapControlEvent, Set<BasemapControlEventHandler>>;
+type SetStyleOptions = NonNullable<Parameters<MapLibreMap['setStyle']>[1]>;
 
 // The shape of a single provider credential input, shared by the centralized
 // settings view and the inline field shown beside a missing-credential error.
@@ -209,28 +205,28 @@ export class BasemapControl implements IControl {
   private _options: Required<
     Pick<
       BasemapControlOptions,
-      | "collapsed"
-      | "position"
-      | "title"
-      | "panelWidth"
-      | "className"
-      | "includeDefaultBasemaps"
-      | "allowMultiple"
-      | "showMultipleToggle"
-      | "resizable"
+      | 'collapsed'
+      | 'position'
+      | 'title'
+      | 'panelWidth'
+      | 'className'
+      | 'includeDefaultBasemaps'
+      | 'allowMultiple'
+      | 'showMultipleToggle'
+      | 'resizable'
     >
   > &
     Omit<
       BasemapControlOptions,
-      | "collapsed"
-      | "position"
-      | "title"
-      | "panelWidth"
-      | "className"
-      | "includeDefaultBasemaps"
-      | "allowMultiple"
-      | "showMultipleToggle"
-      | "resizable"
+      | 'collapsed'
+      | 'position'
+      | 'title'
+      | 'panelWidth'
+      | 'className'
+      | 'includeDefaultBasemaps'
+      | 'allowMultiple'
+      | 'showMultipleToggle'
+      | 'resizable'
     >;
   private _state: BasemapControlState;
   private _basemaps: BasemapDefinition[];
@@ -239,29 +235,26 @@ export class BasemapControl implements IControl {
   // Active managed raster basemaps keyed by basemap id, in insertion order. In
   // single mode this holds at most one entry; in multiple mode it tracks every
   // stacked raster overlay so each can be added or removed independently.
-  private _managedRasters: globalThis.Map<string, ManagedRasterBasemap> =
-    new globalThis.Map();
-  private _mapTilerApiKey = "";
-  private _cartoApiKey = "";
-  private _amazonApiKey = "";
-  private _awsRegion = "";
-  private _mapboxAccessToken = "";
-  private _protomapsApiKey = "";
-  private _stadiaApiKey = "";
-  private _tiandituApiKey = "";
-  private _tomtomApiKey = "";
-  private _hereApiKey = "";
-  private _googleMapsApiKey = "";
+  private _managedRasters: globalThis.Map<string, ManagedRasterBasemap> = new globalThis.Map();
+  private _mapTilerApiKey = '';
+  private _cartoApiKey = '';
+  private _amazonApiKey = '';
+  private _awsRegion = '';
+  private _mapboxAccessToken = '';
+  private _protomapsApiKey = '';
+  private _stadiaApiKey = '';
+  private _tiandituApiKey = '';
+  private _tomtomApiKey = '';
+  private _hereApiKey = '';
+  private _googleMapsApiKey = '';
   // Cached Google Map Tiles API session tokens keyed by their session config, so
   // a traffic overlay reuses a token until it expires instead of creating a new
   // session on every add. Keyed by the serialized config + API key.
-  private _googleSessions: globalThis.Map<
-    string,
-    { token: string; expiry: number }
-  > = new globalThis.Map();
+  private _googleSessions: globalThis.Map<string, { token: string; expiry: number }> =
+    new globalThis.Map();
   // Which sub-view the panel content shows: the basemap list, or the dedicated
   // API-keys settings view opened from the header key button (#837).
-  private _activeView: "basemaps" | "settings" = "basemaps";
+  private _activeView: 'basemaps' | 'settings' = 'basemaps';
   private _settingsButton?: HTMLButtonElement;
   // Provider of the most recent missing-credential error, used to pick the
   // matching help link and the inline credential field beside the error. Kept
@@ -287,17 +280,17 @@ export class BasemapControl implements IControl {
 
   constructor(options?: BasemapControlOptions) {
     this._options = { ...DEFAULT_OPTIONS, ...options };
-    this._mapTilerApiKey = options?.mapTilerApiKey ?? "";
-    this._cartoApiKey = options?.cartoApiKey ?? "";
-    this._amazonApiKey = options?.amazonApiKey ?? "";
-    this._awsRegion = options?.awsRegion ?? "us-east-1";
-    this._mapboxAccessToken = options?.mapboxAccessToken ?? "";
-    this._protomapsApiKey = options?.protomapsApiKey ?? "";
-    this._stadiaApiKey = options?.stadiaApiKey ?? "";
-    this._tiandituApiKey = options?.tiandituApiKey ?? "";
-    this._tomtomApiKey = options?.tomtomApiKey ?? "";
-    this._hereApiKey = options?.hereApiKey ?? "";
-    this._googleMapsApiKey = options?.googleMapsApiKey ?? "";
+    this._mapTilerApiKey = options?.mapTilerApiKey ?? '';
+    this._cartoApiKey = options?.cartoApiKey ?? '';
+    this._amazonApiKey = options?.amazonApiKey ?? '';
+    this._awsRegion = options?.awsRegion ?? 'us-east-1';
+    this._mapboxAccessToken = options?.mapboxAccessToken ?? '';
+    this._protomapsApiKey = options?.protomapsApiKey ?? '';
+    this._stadiaApiKey = options?.stadiaApiKey ?? '';
+    this._tiandituApiKey = options?.tiandituApiKey ?? '';
+    this._tomtomApiKey = options?.tomtomApiKey ?? '';
+    this._hereApiKey = options?.hereApiKey ?? '';
+    this._googleMapsApiKey = options?.googleMapsApiKey ?? '';
     this._basemaps = createBasemapCatalog(
       options?.basemaps,
       this._options.includeDefaultBasemaps,
@@ -311,14 +304,12 @@ export class BasemapControl implements IControl {
       collapsed: this._options.collapsed,
       panelWidth: this._options.panelWidth,
       activeBasemapId: this._options.defaultBasemapId,
-      activeBasemapIds: this._options.defaultBasemapId
-        ? [this._options.defaultBasemapId]
-        : [],
+      activeBasemapIds: this._options.defaultBasemapId ? [this._options.defaultBasemapId] : [],
       allowMultiple: this._options.allowMultiple,
-      query: "",
-      providerFilter: "",
-      categoryFilter: "",
-      beforeId: "",
+      query: '',
+      providerFilter: '',
+      categoryFilter: '',
+      beforeId: '',
       loading: false,
     };
   }
@@ -332,7 +323,7 @@ export class BasemapControl implements IControl {
     this._setupEventListeners();
 
     if (!this._state.collapsed) {
-      this._panel.classList.add("expanded");
+      this._panel.classList.add('expanded');
       requestAnimationFrame(() => this._updatePanelPosition());
     }
 
@@ -350,16 +341,16 @@ export class BasemapControl implements IControl {
 
   onRemove(): void {
     if (this._resizeHandler) {
-      window.removeEventListener("resize", this._resizeHandler);
+      window.removeEventListener('resize', this._resizeHandler);
       this._resizeHandler = null;
     }
     if (this._mapResizeHandler && this._map) {
-      this._map.off("resize", this._mapResizeHandler);
+      this._map.off('resize', this._mapResizeHandler);
       this._mapResizeHandler = null;
     }
-    window.removeEventListener("pointermove", this._onResizeMove);
-    window.removeEventListener("pointerup", this._onResizeEnd);
-    window.removeEventListener("pointercancel", this._onResizeEnd);
+    window.removeEventListener('pointermove', this._onResizeMove);
+    window.removeEventListener('pointerup', this._onResizeEnd);
+    window.removeEventListener('pointercancel', this._onResizeEnd);
     // Detach any in-flight style-load watcher before the map reference is
     // dropped so its listeners cannot fire after removal.
     this._cancelStyleWatch?.();
@@ -384,15 +375,15 @@ export class BasemapControl implements IControl {
     this._state = { ...this._state, ...newState };
     this._syncActiveBasemapState(newState);
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   // Keeps `activeBasemapId` and `activeBasemapIds` consistent when a caller
   // updates only one of them through setState (the React wrapper and external
   // consumers commonly set just `activeBasemapId`).
   private _syncActiveBasemapState(applied: Partial<BasemapControlState>): void {
-    const hasId = "activeBasemapId" in applied;
-    const hasIds = "activeBasemapIds" in applied;
+    const hasId = 'activeBasemapId' in applied;
+    const hasIds = 'activeBasemapIds' in applied;
     if (hasId && !hasIds) {
       const id = this._state.activeBasemapId;
       this._state = { ...this._state, activeBasemapIds: id ? [id] : [] };
@@ -420,27 +411,26 @@ export class BasemapControl implements IControl {
       ...this._state,
       activeBasemapIds,
       activeBasemapId:
-        this._state.activeBasemapId &&
-        activeBasemapIds.includes(this._state.activeBasemapId)
+        this._state.activeBasemapId && activeBasemapIds.includes(this._state.activeBasemapId)
           ? this._state.activeBasemapId
           : activeBasemapIds[activeBasemapIds.length - 1],
     };
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setMapTilerApiKey(apiKey: string): void {
     this._mapTilerApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setCartoApiKey(apiKey: string): void {
     this._cartoApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setAmazonCredentials(apiKey: string, awsRegion = this._awsRegion): void {
@@ -448,49 +438,49 @@ export class BasemapControl implements IControl {
     this._awsRegion = awsRegion;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setMapboxAccessToken(accessToken: string): void {
     this._mapboxAccessToken = accessToken;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setProtomapsApiKey(apiKey: string): void {
     this._protomapsApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setStadiaApiKey(apiKey: string): void {
     this._stadiaApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setTiandituApiKey(apiKey: string): void {
     this._tiandituApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setTomTomApiKey(apiKey: string): void {
     this._tomtomApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setHereApiKey(apiKey: string): void {
     this._hereApiKey = apiKey;
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   setGoogleMapsApiKey(apiKey: string): void {
@@ -499,13 +489,11 @@ export class BasemapControl implements IControl {
     this._googleSessions.clear();
     this._clearError();
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   getActiveBasemap(): BasemapDefinition | undefined {
-    return this._basemaps.find(
-      (basemap) => basemap.id === this._state.activeBasemapId,
-    );
+    return this._basemaps.find((basemap) => basemap.id === this._state.activeBasemapId);
   }
 
   getActiveBasemaps(): BasemapDefinition[] {
@@ -520,13 +508,13 @@ export class BasemapControl implements IControl {
 
   // Apply a basemap, replacing any previously active basemaps.
   async setBasemap(id: string): Promise<void> {
-    return this._applyBasemapChange(id, "replace");
+    return this._applyBasemapChange(id, 'replace');
   }
 
   // Add a raster basemap as an additional overlay without removing the active
   // ones. Style basemaps cannot stack, so they always replace the map style.
   async addBasemap(id: string): Promise<void> {
-    return this._applyBasemapChange(id, "add");
+    return this._applyBasemapChange(id, 'add');
   }
 
   // Remove a previously added managed raster basemap from the map.
@@ -538,17 +526,13 @@ export class BasemapControl implements IControl {
       throw error;
     }
     if (!this._map) {
-      const error = new Error(
-        "BasemapControl must be added to a map before removing a basemap.",
-      );
+      const error = new Error('BasemapControl must be added to a map before removing a basemap.');
       this._handleError(error, basemap);
       throw error;
     }
 
     const managedRaster = this._removeManagedRaster(id);
-    const activeBasemapIds = this._state.activeBasemapIds.filter(
-      (value) => value !== id,
-    );
+    const activeBasemapIds = this._state.activeBasemapIds.filter((value) => value !== id);
     this._state = {
       ...this._state,
       activeBasemapIds,
@@ -556,13 +540,8 @@ export class BasemapControl implements IControl {
       error: undefined,
     };
     this._renderContent(true);
-    this._emit({
-      type: "basemapremove",
-      state: this.getState(),
-      basemap,
-      managedRaster,
-    });
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'basemapremove', state: this.getState(), basemap, managedRaster });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   // Add the basemap if it is not active, otherwise remove it.
@@ -573,10 +552,7 @@ export class BasemapControl implements IControl {
     return this.addBasemap(id);
   }
 
-  private async _applyBasemapChange(
-    id: string,
-    mode: "replace" | "add",
-  ): Promise<void> {
+  private async _applyBasemapChange(id: string, mode: 'replace' | 'add'): Promise<void> {
     const basemap = this._basemaps.find((candidate) => candidate.id === id);
     if (!basemap) {
       const error = new Error(`Basemap "${id}" was not found.`);
@@ -584,9 +560,7 @@ export class BasemapControl implements IControl {
       throw error;
     }
     if (!this._map) {
-      const error = new Error(
-        "BasemapControl must be added to a map before setting a basemap.",
-      );
+      const error = new Error('BasemapControl must be added to a map before setting a basemap.');
       this._handleError(error, basemap);
       throw error;
     }
@@ -594,9 +568,8 @@ export class BasemapControl implements IControl {
     // Raster and vector overlays stack on top of the active basemap; style
     // basemaps replace the entire map style and cannot be stacked.
     const isOverlay =
-      basemap.source.type === "raster" ||
-      basemap.source.type === "vector-overlay";
-    const effectiveMode: "replace" | "add" = isOverlay ? mode : "replace";
+      basemap.source.type === 'raster' || basemap.source.type === 'vector-overlay';
+    const effectiveMode: 'replace' | 'add' = isOverlay ? mode : 'replace';
 
     // Validate provider credentials for a style basemap up-front, before the
     // destructive confirm prompt below. A style swap discards stacked rasters,
@@ -631,10 +604,7 @@ export class BasemapControl implements IControl {
       const replacedBasemapIds = [...this._managedRasters.keys()];
       let confirmed = false;
       try {
-        confirmed = await this._options.confirmStyleReplace({
-          basemap,
-          replacedBasemapIds,
-        });
+        confirmed = await this._options.confirmStyleReplace({ basemap, replacedBasemapIds });
       } catch {
         confirmed = false;
       }
@@ -643,7 +613,7 @@ export class BasemapControl implements IControl {
 
     this._state = { ...this._state, loading: true, error: undefined };
     this._renderContent(true);
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
 
     // The basemap that was active before this swap, captured before the state
     // update below so a failed style load can roll back to it.
@@ -654,23 +624,14 @@ export class BasemapControl implements IControl {
       let resolvedStyleUrl: string | undefined;
       if (isOverlay) {
         await this._waitForStyleReady();
-        // Resolve credentials before removing the current raster. A missing or
-        // invalid key must leave the existing basemap intact.
-        const resolvedRasterTiles =
-          basemap.source.type === "raster"
-            ? await this._resolveRasterTiles(basemap)
-            : undefined;
-        if (basemap.source.type === "vector-overlay") {
-          this._resolveVectorOverlaySource(basemap, basemap.source);
-        }
-        if (effectiveMode === "replace") {
+        if (effectiveMode === 'replace') {
           this._removeManagedBasemap();
         } else {
           // Re-selecting an already-managed overlay re-adds it on top using the
           // current before_id, so drop the previous instance first.
           this._removeManagedRaster(basemap.id);
         }
-        managedRaster = await this._addOverlay(basemap, resolvedRasterTiles);
+        managedRaster = await this._addOverlay(basemap);
       } else {
         const styleUrl = this._resolveStyleUrl(basemap);
         resolvedStyleUrl = styleUrl;
@@ -694,13 +655,8 @@ export class BasemapControl implements IControl {
       this._applyBasemapView(basemap);
 
       const activeBasemapIds =
-        effectiveMode === "add"
-          ? [
-              ...this._state.activeBasemapIds.filter(
-                (value) => value !== basemap.id,
-              ),
-              basemap.id,
-            ]
+        effectiveMode === 'add'
+          ? [...this._state.activeBasemapIds.filter((value) => value !== basemap.id), basemap.id]
           : [basemap.id];
 
       this._state = {
@@ -718,14 +674,14 @@ export class BasemapControl implements IControl {
         : undefined;
       this._renderContent(true);
       this._emit({
-        type: "basemapchange",
+        type: 'basemapchange',
         state: this.getState(),
         basemap,
         managedRaster,
         resolvedStyleUrl,
         mode: effectiveMode,
       });
-      this._emit({ type: "statechange", state: this.getState() });
+      this._emit({ type: 'statechange', state: this.getState() });
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       if (error instanceof MissingCredentialError) {
@@ -777,10 +733,9 @@ export class BasemapControl implements IControl {
       if (settled) return;
       settled = true;
       if (graceTimer !== undefined) clearTimeout(graceTimer);
-      map.off("style.load", onLoad);
-      map.off("error", onError);
-      if (this._cancelStyleWatch === cleanup)
-        this._cancelStyleWatch = undefined;
+      map.off('style.load', onLoad);
+      map.off('error', onError);
+      if (this._cancelStyleWatch === cleanup) this._cancelStyleWatch = undefined;
     };
 
     const fail = (cause: unknown) => {
@@ -817,8 +772,8 @@ export class BasemapControl implements IControl {
     };
 
     this._cancelStyleWatch = cleanup;
-    map.once("style.load", onLoad);
-    map.on("error", onError);
+    map.once('style.load', onLoad);
+    map.on('error', onError);
   }
 
   // Rolls back a failed style swap: restores the previously active basemap (when
@@ -839,10 +794,10 @@ export class BasemapControl implements IControl {
         ? (failedBasemap.provider as keyof typeof PROVIDER_CREDENTIAL_HELP)
         : undefined;
     const hint = credentialProvider
-      ? " Check the API key and try again."
-      : " Check your connection and try again.";
+      ? ' Check the API key and try again.'
+      : ' Check your connection and try again.';
     const error = new BasemapLoadError(
-      `Could not load the "${failedBasemap.name}" basemap${status ? ` (HTTP ${status})` : ""}.${hint}`,
+      `Could not load the "${failedBasemap.name}" basemap${status ? ` (HTTP ${status})` : ''}.${hint}`,
       failedBasemap.provider,
       status,
     );
@@ -851,10 +806,8 @@ export class BasemapControl implements IControl {
     this._missingCredentialProvider = credentialProvider;
     // Only offer an inline retry for a credentialed provider, where re-entering
     // the key and pressing Enter can reasonably succeed.
-    this._lastFailedBasemapId = credentialProvider
-      ? failedBasemap.id
-      : undefined;
-    this._activeView = "basemaps";
+    this._lastFailedBasemapId = credentialProvider ? failedBasemap.id : undefined;
+    this._activeView = 'basemaps';
     this._renderContent(true);
     this._handleError(error, failedBasemap);
   }
@@ -871,26 +824,21 @@ export class BasemapControl implements IControl {
     const map = this._map;
     const previous =
       previousActiveBasemapId && previousActiveBasemapId !== failedBasemapId
-        ? this._basemaps.find(
-            (candidate) => candidate.id === previousActiveBasemapId,
-          )
+        ? this._basemaps.find((candidate) => candidate.id === previousActiveBasemapId)
         : undefined;
 
     const pointStateAtPrevious = () => {
       this._state = {
         ...this._state,
         activeBasemapId: previousActiveBasemapId,
-        activeBasemapIds: previousActiveBasemapId
-          ? [previousActiveBasemapId]
-          : [],
+        activeBasemapIds: previousActiveBasemapId ? [previousActiveBasemapId] : [],
       };
     };
 
     if (
       !map ||
       !previous ||
-      (previous.source.type !== "style" &&
-        previous.source.type !== "vector-style")
+      (previous.source.type !== 'style' && previous.source.type !== 'vector-style')
     ) {
       pointStateAtPrevious();
       return;
@@ -911,12 +859,12 @@ export class BasemapControl implements IControl {
         activeBasemapIds: [previous.id],
       };
       this._emit({
-        type: "basemapchange",
+        type: 'basemapchange',
         state: this.getState(),
         basemap: previous,
         resolvedStyleUrl: styleUrl,
         restored: true,
-        mode: "replace",
+        mode: 'replace',
       });
     } catch {
       // If even the restore fails (e.g. the previous basemap now needs a key),
@@ -932,8 +880,7 @@ export class BasemapControl implements IControl {
   private _selectBasemap(id: string): void {
     const basemap = this._basemaps.find((candidate) => candidate.id === id);
     const isOverlay =
-      basemap?.source.type === "raster" ||
-      basemap?.source.type === "vector-overlay";
+      basemap?.source.type === 'raster' || basemap?.source.type === 'vector-overlay';
     if (this._state.allowMultiple && isOverlay) {
       this.toggleBasemap(id).catch(() => {});
       return;
@@ -946,16 +893,16 @@ export class BasemapControl implements IControl {
 
     if (this._panel) {
       if (this._state.collapsed) {
-        this._panel.classList.remove("expanded");
-        this._emit({ type: "collapse", state: this.getState() });
+        this._panel.classList.remove('expanded');
+        this._emit({ type: 'collapse', state: this.getState() });
       } else {
-        this._panel.classList.add("expanded");
+        this._panel.classList.add('expanded');
         this._updatePanelPosition();
-        this._emit({ type: "expand", state: this.getState() });
+        this._emit({ type: 'expand', state: this.getState() });
       }
     }
 
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   expand(): void {
@@ -990,8 +937,8 @@ export class BasemapControl implements IControl {
   }
 
   private _handleError(error: Error, basemap?: BasemapDefinition): void {
-    this._emit({ type: "error", state: this.getState(), error, basemap });
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'error', state: this.getState(), error, basemap });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   // Clears the current error and its associated missing-credential provider so
@@ -1013,30 +960,26 @@ export class BasemapControl implements IControl {
   // provider (for the help link and inline field) and the basemap to retry, and
   // surfaces the basemaps view so the inline credential field beside the error
   // is visible (#837).
-  private _enterCredentialError(
-    error: MissingCredentialError,
-    basemap: BasemapDefinition,
-  ): void {
+  private _enterCredentialError(error: MissingCredentialError, basemap: BasemapDefinition): void {
     this._state = { ...this._state, loading: false, error: error.message };
-    this._missingCredentialProvider =
-      error.provider as keyof typeof PROVIDER_CREDENTIAL_HELP;
+    this._missingCredentialProvider = error.provider as keyof typeof PROVIDER_CREDENTIAL_HELP;
     this._lastFailedBasemapId = basemap.id;
-    this._activeView = "basemaps";
+    this._activeView = 'basemaps';
     this._renderContent(true);
     this._handleError(error, basemap);
   }
 
   private _createContainer(): HTMLElement {
-    const container = document.createElement("div");
+    const container = document.createElement('div');
     container.className = `maplibregl-ctrl maplibregl-ctrl-group basemap-control${
-      this._options.className ? ` ${this._options.className}` : ""
+      this._options.className ? ` ${this._options.className}` : ''
     }`;
 
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = "basemap-control-toggle";
-    toggleBtn.type = "button";
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'basemap-control-toggle';
+    toggleBtn.type = 'button';
     toggleBtn.title = this._options.title;
-    toggleBtn.setAttribute("aria-label", this._options.title);
+    toggleBtn.setAttribute('aria-label', this._options.title);
     toggleBtn.innerHTML = `
       <span class="basemap-control-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1046,76 +989,74 @@ export class BasemapControl implements IControl {
         </svg>
       </span>
     `;
-    toggleBtn.addEventListener("click", () => this.toggle());
+    toggleBtn.addEventListener('click', () => this.toggle());
     container.appendChild(toggleBtn);
 
     return container;
   }
 
   private _createPanel(): HTMLElement {
-    const panel = document.createElement("div");
-    panel.className = "basemap-control-panel";
+    const panel = document.createElement('div');
+    panel.className = 'basemap-control-panel';
     panel.style.width = `${this._state.panelWidth}px`;
     if (this._state.panelHeight !== undefined) {
       panel.style.height = `${this._state.panelHeight}px`;
-      panel.classList.add("is-resized");
+      panel.classList.add('is-resized');
     }
 
-    const header = document.createElement("div");
-    header.className = "basemap-control-header";
+    const header = document.createElement('div');
+    header.className = 'basemap-control-header';
 
-    const title = document.createElement("span");
-    title.className = "basemap-control-title";
+    const title = document.createElement('span');
+    title.className = 'basemap-control-title';
     title.textContent = this._options.title;
 
     // Key button: opens the dedicated API-keys settings view. Only meaningful
     // when at least one catalog basemap needs a provider credential, so its
     // visibility is reconciled in `_renderContent`.
-    const settingsBtn = document.createElement("button");
-    settingsBtn.className = "basemap-control-settings-toggle";
-    settingsBtn.type = "button";
-    settingsBtn.setAttribute("aria-label", "API keys");
-    settingsBtn.title = "API keys";
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'basemap-control-settings-toggle';
+    settingsBtn.type = 'button';
+    settingsBtn.setAttribute('aria-label', 'API keys');
+    settingsBtn.title = 'API keys';
     settingsBtn.innerHTML = `
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>
       </svg>
     `;
-    settingsBtn.addEventListener("click", () => this._toggleSettingsView());
+    settingsBtn.addEventListener('click', () => this._toggleSettingsView());
     this._settingsButton = settingsBtn;
 
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "basemap-control-close";
-    closeBtn.type = "button";
-    closeBtn.setAttribute("aria-label", "Close basemap panel");
-    closeBtn.innerHTML = "&times;";
-    closeBtn.addEventListener("click", () => this.collapse());
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'basemap-control-close';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Close basemap panel');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.addEventListener('click', () => this.collapse());
 
     header.appendChild(title);
     header.appendChild(settingsBtn);
     header.appendChild(closeBtn);
 
-    this._content = document.createElement("div");
-    this._content.className = "basemap-control-content";
+    this._content = document.createElement('div');
+    this._content.className = 'basemap-control-content';
 
     panel.appendChild(header);
     panel.appendChild(this._content);
 
     if (this._options.resizable) {
-      panel.appendChild(this._createResizeHandle("bottom-left"));
-      panel.appendChild(this._createResizeHandle("bottom-right"));
+      panel.appendChild(this._createResizeHandle('bottom-left'));
+      panel.appendChild(this._createResizeHandle('bottom-right'));
     }
 
     return panel;
   }
 
-  private _createResizeHandle(
-    corner: "bottom-left" | "bottom-right",
-  ): HTMLElement {
-    const handle = document.createElement("div");
+  private _createResizeHandle(corner: 'bottom-left' | 'bottom-right'): HTMLElement {
+    const handle = document.createElement('div');
     handle.className = `basemap-control-resize-handle basemap-control-resize-${corner}`;
-    handle.setAttribute("aria-hidden", "true");
-    handle.addEventListener("pointerdown", (event) => this._startResize(event));
+    handle.setAttribute('aria-hidden', 'true');
+    handle.addEventListener('pointerdown', (event) => this._startResize(event));
     return handle;
   }
 
@@ -1126,7 +1067,7 @@ export class BasemapControl implements IControl {
 
     // The settings view replaces the whole content area; never show it when the
     // catalog has no keyed providers (the button is hidden in that case too).
-    if (this._activeView === "settings" && this._hasProviderSettings()) {
+    if (this._activeView === 'settings' && this._hasProviderSettings()) {
       this._content.replaceChildren(this._createSettingsView());
       return;
     }
@@ -1134,23 +1075,19 @@ export class BasemapControl implements IControl {
     const categories = getBasemapCategories(this._basemaps);
     const results = this._getFilteredBasemaps();
     const previousResultsScrollTop = preserveResultsScroll
-      ? this._content.querySelector(".basemap-control-results")?.scrollTop
+      ? this._content.querySelector('.basemap-control-results')?.scrollTop
       : undefined;
 
     this._content.replaceChildren(
       this._createSearchRow(),
-      ...(this._options.showMultipleToggle
-        ? [this._createMultipleToggleRow()]
-        : []),
+      ...(this._options.showMultipleToggle ? [this._createMultipleToggleRow()] : []),
       this._createFilterRow(this._providers, categories),
       this._createStatus(results.length),
       this._createResults(results),
     );
 
     if (previousResultsScrollTop !== undefined) {
-      const resultsElement = this._content.querySelector(
-        ".basemap-control-results",
-      );
+      const resultsElement = this._content.querySelector('.basemap-control-results');
       if (resultsElement) resultsElement.scrollTop = previousResultsScrollTop;
     }
   }
@@ -1162,29 +1099,28 @@ export class BasemapControl implements IControl {
     const hasSettings = this._hasProviderSettings();
     this._settingsButton.hidden = !hasSettings;
     this._settingsButton.classList.toggle(
-      "is-active",
-      hasSettings && this._activeView === "settings",
+      'is-active',
+      hasSettings && this._activeView === 'settings',
     );
   }
 
   private _toggleSettingsView(): void {
     if (!this._hasProviderSettings()) return;
-    this._activeView =
-      this._activeView === "settings" ? "basemaps" : "settings";
+    this._activeView = this._activeView === 'settings' ? 'basemaps' : 'settings';
     this._renderContent();
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   }
 
   private _renderFilteredResults(): void {
     if (!this._content) return;
 
     const results = this._getFilteredBasemaps();
-    this._content
-      .querySelector(".basemap-control-status")
-      ?.replaceWith(this._createStatus(results.length));
-    this._content
-      .querySelector(".basemap-control-results")
-      ?.replaceWith(this._createResults(results));
+    this._content.querySelector('.basemap-control-status')?.replaceWith(
+      this._createStatus(results.length),
+    );
+    this._content.querySelector('.basemap-control-results')?.replaceWith(
+      this._createResults(results),
+    );
   }
 
   private _getFilteredBasemaps(): BasemapDefinition[] {
@@ -1196,30 +1132,30 @@ export class BasemapControl implements IControl {
   }
 
   private _createSearchRow(): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "basemap-control-search-row";
+    const row = document.createElement('div');
+    row.className = 'basemap-control-search-row';
     row.appendChild(this._createSearchInput());
     row.appendChild(this._createBeforeIdInput());
     return row;
   }
 
   private _createMultipleToggleRow(): HTMLElement {
-    const label = document.createElement("label");
-    label.className = "basemap-control-multiple-toggle";
+    const label = document.createElement('label');
+    label.className = 'basemap-control-multiple-toggle';
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "basemap-control-multiple-checkbox";
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'basemap-control-multiple-checkbox';
     checkbox.checked = this._state.allowMultiple;
-    checkbox.setAttribute("aria-label", "Add basemaps instead of replacing");
-    checkbox.addEventListener("change", () => {
+    checkbox.setAttribute('aria-label', 'Add basemaps instead of replacing');
+    checkbox.addEventListener('change', () => {
       this._state = { ...this._state, allowMultiple: checkbox.checked };
-      this._emit({ type: "statechange", state: this.getState() });
+      this._emit({ type: 'statechange', state: this.getState() });
     });
 
-    const text = document.createElement("span");
-    text.className = "basemap-control-multiple-toggle-text";
-    text.textContent = "Add basemaps (stack instead of replace)";
+    const text = document.createElement('span');
+    text.className = 'basemap-control-multiple-toggle-text';
+    text.textContent = 'Add basemaps (stack instead of replace)';
 
     label.appendChild(checkbox);
     label.appendChild(text);
@@ -1227,16 +1163,16 @@ export class BasemapControl implements IControl {
   }
 
   private _createSearchInput(): HTMLElement {
-    const wrapper = document.createElement("div");
-    wrapper.className = "basemap-control-search";
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-search';
 
-    const input = document.createElement("input");
-    input.className = "basemap-control-input";
-    input.type = "search";
-    input.placeholder = "Search basemaps";
+    const input = document.createElement('input');
+    input.className = 'basemap-control-input';
+    input.type = 'search';
+    input.placeholder = 'Search basemaps';
     input.value = this._state.query;
-    input.setAttribute("aria-label", "Search basemaps");
-    input.addEventListener("input", () => {
+    input.setAttribute('aria-label', 'Search basemaps');
+    input.addEventListener('input', () => {
       // Browsing for an alternative basemap dismisses a stale credential error
       // so it stops obscuring the list (#837). Re-render fully (not just the
       // results) so the error banner is removed.
@@ -1251,7 +1187,7 @@ export class BasemapControl implements IControl {
       } else {
         this._renderFilteredResults();
       }
-      this._emit({ type: "statechange", state: this.getState() });
+      this._emit({ type: 'statechange', state: this.getState() });
     });
 
     wrapper.appendChild(input);
@@ -1259,18 +1195,18 @@ export class BasemapControl implements IControl {
   }
 
   private _createBeforeIdInput(): HTMLElement {
-    const wrapper = document.createElement("div");
-    wrapper.className = "basemap-control-before-id";
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-before-id';
 
-    const input = document.createElement("input");
-    input.className = "basemap-control-input";
-    input.type = "text";
-    input.placeholder = "before_id: none";
+    const input = document.createElement('input');
+    input.className = 'basemap-control-input';
+    input.type = 'text';
+    input.placeholder = 'before_id: none';
     input.value = this._state.beforeId;
-    input.setAttribute("aria-label", "before_id");
-    input.addEventListener("input", () => {
+    input.setAttribute('aria-label', 'before_id');
+    input.addEventListener('input', () => {
       this._state = { ...this._state, beforeId: input.value };
-      this._emit({ type: "statechange", state: this.getState() });
+      this._emit({ type: 'statechange', state: this.getState() });
     });
 
     wrapper.appendChild(input);
@@ -1289,15 +1225,15 @@ export class BasemapControl implements IControl {
   }> {
     return [
       {
-        provider: "carto",
-        label: "CARTO",
+        provider: 'carto',
+        label: 'CARTO',
         has: this._hasCartoBasemaps(),
         fields: [
           {
-            className: "basemap-control-carto-key",
-            type: "password",
-            placeholder: "CARTO API key",
-            ariaLabel: "CARTO API key",
+            className: 'basemap-control-carto-key',
+            type: 'password',
+            placeholder: 'CARTO API key',
+            ariaLabel: 'CARTO API key',
             value: this._cartoApiKey,
             onInput: (value) => {
               this._cartoApiKey = value;
@@ -1306,15 +1242,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "maptiler",
-        label: "MapTiler",
+        provider: 'maptiler',
+        label: 'MapTiler',
         has: this._hasMapTilerBasemaps(),
         fields: [
           {
-            className: "basemap-control-maptiler-key",
-            type: "password",
-            placeholder: "MapTiler API key",
-            ariaLabel: "MapTiler API key",
+            className: 'basemap-control-maptiler-key',
+            type: 'password',
+            placeholder: 'MapTiler API key',
+            ariaLabel: 'MapTiler API key',
             value: this._mapTilerApiKey,
             onInput: (value) => {
               this._mapTilerApiKey = value;
@@ -1323,15 +1259,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "mapbox",
-        label: "Mapbox",
+        provider: 'mapbox',
+        label: 'Mapbox',
         has: this._hasMapboxBasemaps(),
         fields: [
           {
-            className: "basemap-control-mapbox-token",
-            type: "password",
-            placeholder: "Mapbox access token",
-            ariaLabel: "Mapbox access token",
+            className: 'basemap-control-mapbox-token',
+            type: 'password',
+            placeholder: 'Mapbox access token',
+            ariaLabel: 'Mapbox access token',
             value: this._mapboxAccessToken,
             onInput: (value) => {
               this._mapboxAccessToken = value;
@@ -1340,15 +1276,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "protomaps",
-        label: "Protomaps",
+        provider: 'protomaps',
+        label: 'Protomaps',
         has: this._hasProtomapsBasemaps(),
         fields: [
           {
-            className: "basemap-control-protomaps-key",
-            type: "password",
-            placeholder: "Protomaps API key",
-            ariaLabel: "Protomaps API key",
+            className: 'basemap-control-protomaps-key',
+            type: 'password',
+            placeholder: 'Protomaps API key',
+            ariaLabel: 'Protomaps API key',
             value: this._protomapsApiKey,
             onInput: (value) => {
               this._protomapsApiKey = value;
@@ -1357,15 +1293,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "stadia",
-        label: "Stadia Maps",
+        provider: 'stadia',
+        label: 'Stadia Maps',
         has: this._hasStadiaBasemaps(),
         fields: [
           {
-            className: "basemap-control-stadia-key",
-            type: "password",
-            placeholder: "Stadia Maps API key",
-            ariaLabel: "Stadia Maps API key",
+            className: 'basemap-control-stadia-key',
+            type: 'password',
+            placeholder: 'Stadia Maps API key',
+            ariaLabel: 'Stadia Maps API key',
             value: this._stadiaApiKey,
             onInput: (value) => {
               this._stadiaApiKey = value;
@@ -1374,15 +1310,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "tianditu",
-        label: "Tianditu",
+        provider: 'tianditu',
+        label: 'Tianditu',
         has: this._hasTiandituBasemaps(),
         fields: [
           {
-            className: "basemap-control-tianditu-key",
-            type: "password",
-            placeholder: "Tianditu API key",
-            ariaLabel: "Tianditu API key",
+            className: 'basemap-control-tianditu-key',
+            type: 'password',
+            placeholder: 'Tianditu API key',
+            ariaLabel: 'Tianditu API key',
             value: this._tiandituApiKey,
             onInput: (value) => {
               this._tiandituApiKey = value;
@@ -1391,15 +1327,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "tomtom",
-        label: "TomTom",
+        provider: 'tomtom',
+        label: 'TomTom',
         has: this._hasTomTomBasemaps(),
         fields: [
           {
-            className: "basemap-control-tomtom-key",
-            type: "password",
-            placeholder: "TomTom API key",
-            ariaLabel: "TomTom API key",
+            className: 'basemap-control-tomtom-key',
+            type: 'password',
+            placeholder: 'TomTom API key',
+            ariaLabel: 'TomTom API key',
             value: this._tomtomApiKey,
             onInput: (value) => {
               this._tomtomApiKey = value;
@@ -1408,15 +1344,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "here",
-        label: "HERE",
+        provider: 'here',
+        label: 'HERE',
         has: this._hasHereBasemaps(),
         fields: [
           {
-            className: "basemap-control-here-key",
-            type: "password",
-            placeholder: "HERE API key",
-            ariaLabel: "HERE API key",
+            className: 'basemap-control-here-key',
+            type: 'password',
+            placeholder: 'HERE API key',
+            ariaLabel: 'HERE API key',
             value: this._hereApiKey,
             onInput: (value) => {
               this._hereApiKey = value;
@@ -1425,15 +1361,15 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "google",
-        label: "Google",
+        provider: 'google',
+        label: 'Google',
         has: this._hasGoogleApiKeyBasemaps(),
         fields: [
           {
-            className: "basemap-control-google-key",
-            type: "password",
-            placeholder: "Google Maps API key",
-            ariaLabel: "Google Maps API key",
+            className: 'basemap-control-google-key',
+            type: 'password',
+            placeholder: 'Google Maps API key',
+            ariaLabel: 'Google Maps API key',
             value: this._googleMapsApiKey,
             onInput: (value) => {
               this._googleMapsApiKey = value;
@@ -1444,25 +1380,25 @@ export class BasemapControl implements IControl {
         ],
       },
       {
-        provider: "amazon",
-        label: "Amazon",
+        provider: 'amazon',
+        label: 'Amazon',
         has: this._hasAmazonBasemaps(),
         fields: [
           {
-            className: "basemap-control-amazon-key",
-            type: "password",
-            placeholder: "Amazon API key",
-            ariaLabel: "Amazon API key",
+            className: 'basemap-control-amazon-key',
+            type: 'password',
+            placeholder: 'Amazon API key',
+            ariaLabel: 'Amazon API key',
             value: this._amazonApiKey,
             onInput: (value) => {
               this._amazonApiKey = value;
             },
           },
           {
-            className: "basemap-control-aws-region",
-            type: "text",
-            placeholder: "AWS region",
-            ariaLabel: "AWS region",
+            className: 'basemap-control-aws-region',
+            type: 'text',
+            placeholder: 'AWS region',
+            ariaLabel: 'AWS region',
             value: this._awsRegion,
             onInput: (value) => {
               this._awsRegion = value;
@@ -1477,40 +1413,39 @@ export class BasemapControl implements IControl {
   // every provider credential in one place, separate from the basemap list, so
   // the list itself stays free of input clutter (#837, Bug 5).
   private _createSettingsView(): HTMLElement {
-    const view = document.createElement("div");
-    view.className = "basemap-control-settings-view";
+    const view = document.createElement('div');
+    view.className = 'basemap-control-settings-view';
 
-    const head = document.createElement("div");
-    head.className = "basemap-control-settings-head";
+    const head = document.createElement('div');
+    head.className = 'basemap-control-settings-head';
 
-    const back = document.createElement("button");
-    back.type = "button";
-    back.className = "basemap-control-settings-back";
-    back.setAttribute("aria-label", "Back to basemaps");
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'basemap-control-settings-back';
+    back.setAttribute('aria-label', 'Back to basemaps');
     back.innerHTML = `
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 18-6-6 6-6"/>
       </svg>
       <span>Basemaps</span>
     `;
-    back.addEventListener("click", () => this._toggleSettingsView());
+    back.addEventListener('click', () => this._toggleSettingsView());
 
-    const heading = document.createElement("span");
-    heading.className = "basemap-control-settings-heading";
-    heading.textContent = "API keys";
+    const heading = document.createElement('span');
+    heading.className = 'basemap-control-settings-heading';
+    heading.textContent = 'API keys';
 
     head.appendChild(back);
     head.appendChild(heading);
     view.appendChild(head);
 
-    const intro = document.createElement("p");
-    intro.className = "basemap-control-settings-intro";
-    intro.textContent =
-      "Add the credentials each provider requires to use its basemaps.";
+    const intro = document.createElement('p');
+    intro.className = 'basemap-control-settings-intro';
+    intro.textContent = 'Add the credentials each provider requires to use its basemaps.';
     view.appendChild(intro);
 
-    const fields = document.createElement("div");
-    fields.className = "basemap-control-provider-settings-fields";
+    const fields = document.createElement('div');
+    fields.className = 'basemap-control-provider-settings-fields';
     for (const def of this._providerFieldDefs()) {
       if (def.has) fields.appendChild(this._createProviderFieldGroup(def));
     }
@@ -1524,11 +1459,11 @@ export class BasemapControl implements IControl {
     label: string;
     fields: ProviderInputConfig[];
   }): HTMLElement {
-    const group = document.createElement("div");
+    const group = document.createElement('div');
     group.className = `basemap-control-provider-group basemap-control-provider-group-${def.provider}`;
 
-    const label = document.createElement("span");
-    label.className = "basemap-control-provider-group-label";
+    const label = document.createElement('span');
+    label.className = 'basemap-control-provider-group-label';
     label.textContent = def.label;
     group.appendChild(label);
 
@@ -1545,13 +1480,12 @@ export class BasemapControl implements IControl {
   private _createInlineCredentialFields(): HTMLElement | null {
     if (!this._state.error || !this._missingCredentialProvider) return null;
     const def = this._providerFieldDefs().find(
-      (candidate) =>
-        candidate.provider === this._missingCredentialProvider && candidate.has,
+      (candidate) => candidate.provider === this._missingCredentialProvider && candidate.has,
     );
     if (!def) return null;
 
-    const wrapper = document.createElement("div");
-    wrapper.className = "basemap-control-status-fields";
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-status-fields';
     for (const field of def.fields) {
       wrapper.appendChild(
         this._createProviderSettingsInput({
@@ -1569,8 +1503,7 @@ export class BasemapControl implements IControl {
   }
 
   private _retryLastFailedBasemap(): void {
-    if (this._lastFailedBasemapId)
-      this._selectBasemap(this._lastFailedBasemapId);
+    if (this._lastFailedBasemapId) this._selectBasemap(this._lastFailedBasemapId);
   }
 
   // Renders the optional API key input shown after a basemap falls back to its
@@ -1594,28 +1527,28 @@ export class BasemapControl implements IControl {
     );
     if (!def) return null;
 
-    const wrapper = document.createElement("div");
-    wrapper.className = "basemap-control-optional-key";
+    const wrapper = document.createElement('div');
+    wrapper.className = 'basemap-control-optional-key';
 
-    const message = document.createElement("span");
-    message.className = "basemap-control-optional-key-message";
+    const message = document.createElement('span');
+    message.className = 'basemap-control-optional-key-message';
     message.textContent = `Enter a ${def.fields[0].placeholder} to load the official ${def.label} tiles.`;
 
     const help = PROVIDER_CREDENTIAL_HELP[def.provider];
     if (help) {
-      message.appendChild(document.createTextNode(" "));
-      const link = document.createElement("a");
-      link.className = "basemap-control-status-link";
+      message.appendChild(document.createTextNode(' '));
+      const link = document.createElement('a');
+      link.className = 'basemap-control-status-link';
       link.href = help.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
       link.textContent = help.label;
       message.appendChild(link);
     }
     wrapper.appendChild(message);
 
-    const fields = document.createElement("div");
-    fields.className = "basemap-control-status-fields";
+    const fields = document.createElement('div');
+    fields.className = 'basemap-control-status-fields';
     for (const field of def.fields) {
       fields.appendChild(
         this._createProviderSettingsInput({
@@ -1647,29 +1580,29 @@ export class BasemapControl implements IControl {
     clearErrorOnInput?: boolean;
     onEnter?: () => void;
   }): HTMLElement {
-    const wrapper = document.createElement("div");
+    const wrapper = document.createElement('div');
     wrapper.className = className;
 
-    const input = document.createElement("input");
-    input.className = "basemap-control-input";
+    const input = document.createElement('input');
+    input.className = 'basemap-control-input';
     input.type = type;
     input.placeholder = placeholder;
     input.value = value;
-    input.name = ariaLabel.toLowerCase().replace(/\s+/g, "-");
-    input.autocomplete = "new-password";
-    input.autocapitalize = "none";
+    input.name = ariaLabel.toLowerCase().replace(/\s+/g, '-');
+    input.autocomplete = 'new-password';
+    input.autocapitalize = 'none';
     input.spellcheck = false;
-    input.setAttribute("autocorrect", "off");
-    input.setAttribute("aria-label", ariaLabel);
-    input.addEventListener("input", () => {
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('aria-label', ariaLabel);
+    input.addEventListener('input', () => {
       onInput(input.value);
       if (clearErrorOnInput) this._clearError();
       if (rerenderOnInput) this._renderFilteredResults();
-      this._emit({ type: "statechange", state: this.getState() });
+      this._emit({ type: 'statechange', state: this.getState() });
     });
     if (onEnter) {
-      input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
           event.preventDefault();
           onEnter();
         }
@@ -1680,39 +1613,33 @@ export class BasemapControl implements IControl {
     return wrapper;
   }
 
-  private _createFilterRow(
-    providers: BasemapProvider[],
-    categories: string[],
-  ): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "basemap-control-filters";
+  private _createFilterRow(providers: BasemapProvider[], categories: string[]): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'basemap-control-filters';
     row.appendChild(
       this._createSelect(
-        "Provider",
+        'Provider',
         this._state.providerFilter,
-        providers.map((provider) => ({
-          value: provider.id,
-          label: provider.name,
-        })),
+        providers.map((provider) => ({ value: provider.id, label: provider.name })),
         (value) => {
           this._state = { ...this._state, providerFilter: value };
           // Filtering to browse other basemaps clears a stale error (#837).
           this._clearError();
           this._renderContent();
-          this._emit({ type: "statechange", state: this.getState() });
+          this._emit({ type: 'statechange', state: this.getState() });
         },
       ),
     );
     row.appendChild(
       this._createSelect(
-        "Category",
+        'Category',
         this._state.categoryFilter,
         categories.map((category) => ({ value: category, label: category })),
         (value) => {
           this._state = { ...this._state, categoryFilter: value };
           this._clearError();
           this._renderContent();
-          this._emit({ type: "statechange", state: this.getState() });
+          this._emit({ type: 'statechange', state: this.getState() });
         },
       ),
     );
@@ -1725,60 +1652,58 @@ export class BasemapControl implements IControl {
     options: Array<{ value: string; label: string }>,
     onChange: (value: string) => void,
   ): HTMLElement {
-    const select = document.createElement("select");
-    select.className = "basemap-control-select";
-    select.setAttribute("aria-label", label);
+    const select = document.createElement('select');
+    select.className = 'basemap-control-select';
+    select.setAttribute('aria-label', label);
 
-    const all = document.createElement("option");
-    all.value = "";
+    const all = document.createElement('option');
+    all.value = '';
     all.textContent = `All ${label.toLowerCase()}s`;
     select.appendChild(all);
 
     options.forEach((option) => {
-      const element = document.createElement("option");
+      const element = document.createElement('option');
       element.value = option.value;
       element.textContent = option.label;
       select.appendChild(element);
     });
 
     select.value = value;
-    select.addEventListener("change", () => onChange(select.value));
+    select.addEventListener('change', () => onChange(select.value));
     return select;
   }
 
   private _createStatus(resultCount: number): HTMLElement {
-    const status = document.createElement("div");
-    status.className = "basemap-control-status";
+    const status = document.createElement('div');
+    status.className = 'basemap-control-status';
     if (this._state.loading) {
-      status.textContent = "Applying basemap...";
+      status.textContent = 'Applying basemap...';
     } else if (this._state.error) {
-      status.classList.add("is-error");
-      const message = document.createElement("span");
-      message.className = "basemap-control-status-message";
+      status.classList.add('is-error');
+      const message = document.createElement('span');
+      message.className = 'basemap-control-status-message';
       message.textContent = this._state.error;
       status.appendChild(message);
 
       // A missing-credential error is otherwise a dead end: append a link to
       // where the credential is issued and point at the Provider settings
       // inputs (which the error also auto-expands).
-      const help = this._credentialHelpForError(
-        this._missingCredentialProvider,
-      );
+      const help = this._credentialHelpForError(this._missingCredentialProvider);
       if (help) {
-        const actions = document.createElement("span");
-        actions.className = "basemap-control-status-actions";
+        const actions = document.createElement('span');
+        actions.className = 'basemap-control-status-actions';
 
-        const link = document.createElement("a");
-        link.className = "basemap-control-status-link";
+        const link = document.createElement('a');
+        link.className = 'basemap-control-status-link';
         link.href = help.url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
         link.textContent = help.label;
         actions.appendChild(link);
 
-        const hint = document.createElement("span");
-        hint.className = "basemap-control-status-hint";
-        hint.textContent = ", then enter it below and press Enter.";
+        const hint = document.createElement('span');
+        hint.className = 'basemap-control-status-hint';
+        hint.textContent = ', then enter it below and press Enter.';
         actions.appendChild(hint);
 
         status.appendChild(actions);
@@ -1790,9 +1715,9 @@ export class BasemapControl implements IControl {
       const inlineFields = this._createInlineCredentialFields();
       if (inlineFields) status.appendChild(inlineFields);
     } else {
-      const count = document.createElement("span");
-      count.className = "basemap-control-status-message";
-      count.textContent = `${resultCount} basemap${resultCount === 1 ? "" : "s"}`;
+      const count = document.createElement('span');
+      count.className = 'basemap-control-status-message';
+      count.textContent = `${resultCount} basemap${resultCount === 1 ? '' : 's'}`;
       status.appendChild(count);
 
       // After a basemap falls back to keyless public tiles, offer an optional
@@ -1800,7 +1725,7 @@ export class BasemapControl implements IControl {
       // away, without hunting for the provider settings view.
       const optionalKey = this._createOptionalKeyPrompt();
       if (optionalKey) {
-        status.classList.add("has-optional-key");
+        status.classList.add('has-optional-key');
         status.appendChild(optionalKey);
       }
     }
@@ -1816,60 +1741,60 @@ export class BasemapControl implements IControl {
   }
 
   private _createResults(results: BasemapDefinition[]): HTMLElement {
-    const list = document.createElement("div");
-    list.className = "basemap-control-results";
+    const list = document.createElement('div');
+    list.className = 'basemap-control-results';
 
     if (results.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "basemap-control-empty";
-      empty.textContent = "No basemaps match your search.";
+      const empty = document.createElement('div');
+      empty.className = 'basemap-control-empty';
+      empty.textContent = 'No basemaps match your search.';
       list.appendChild(empty);
       return list;
     }
 
     results.forEach((basemap) => {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "basemap-control-result";
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'basemap-control-result';
       row.dataset.basemapId = basemap.id;
       if (this._state.activeBasemapIds.includes(basemap.id)) {
-        row.classList.add("is-active");
-        row.setAttribute("aria-current", "true");
+        row.classList.add('is-active');
+        row.setAttribute('aria-current', 'true');
       }
       row.disabled = this._state.loading;
-      row.addEventListener("click", () => {
+      row.addEventListener('click', () => {
         this._selectBasemap(basemap.id);
       });
 
-      const main = document.createElement("span");
-      main.className = "basemap-control-result-main";
+      const main = document.createElement('span');
+      main.className = 'basemap-control-result-main';
 
-      const name = document.createElement("span");
-      name.className = "basemap-control-result-name";
+      const name = document.createElement('span');
+      name.className = 'basemap-control-result-name';
       name.textContent = basemap.name;
 
-      const meta = document.createElement("span");
-      meta.className = "basemap-control-result-meta";
+      const meta = document.createElement('span');
+      meta.className = 'basemap-control-result-meta';
       meta.textContent = this._formatBasemapMeta(basemap);
 
       main.appendChild(name);
       main.appendChild(meta);
 
-      const type = document.createElement("span");
-      type.className = "basemap-control-result-type";
+      const type = document.createElement('span');
+      type.className = 'basemap-control-result-type';
       type.textContent =
-        basemap.type === "raster"
-          ? "Raster"
-          : basemap.type === "vector-overlay"
-            ? "Overlay"
-            : "Style";
+        basemap.type === 'raster'
+          ? 'Raster'
+          : basemap.type === 'vector-overlay'
+            ? 'Overlay'
+            : 'Style';
 
       row.appendChild(main);
       row.appendChild(type);
 
       if (basemap.attribution) {
-        const attribution = document.createElement("span");
-        attribution.className = "basemap-control-result-attribution";
+        const attribution = document.createElement('span');
+        attribution.className = 'basemap-control-result-attribution';
         attribution.textContent = this._stripHtml(basemap.attribution);
         row.appendChild(attribution);
       }
@@ -1881,54 +1806,50 @@ export class BasemapControl implements IControl {
   }
 
   private _formatBasemapMeta(basemap: BasemapDefinition): string {
-    const provider = this._providers.find(
-      (candidate) => candidate.id === basemap.provider,
-    );
-    return [provider?.name ?? basemap.provider, basemap.category]
-      .filter(Boolean)
-      .join(" / ");
+    const provider = this._providers.find((candidate) => candidate.id === basemap.provider);
+    return [provider?.name ?? basemap.provider, basemap.category].filter(Boolean).join(' / ');
   }
 
   private _stripHtml(value: string): string {
-    const template = document.createElement("template");
+    const template = document.createElement('template');
     template.innerHTML = value;
     return template.content.textContent ?? value;
   }
 
   private _hasMapTilerBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "maptiler");
+    return this._basemaps.some((basemap) => basemap.provider === 'maptiler');
   }
 
   private _hasAmazonBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "amazon");
+    return this._basemaps.some((basemap) => basemap.provider === 'amazon');
   }
 
   private _hasMapboxBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "mapbox");
+    return this._basemaps.some((basemap) => basemap.provider === 'mapbox');
   }
 
   private _hasProtomapsBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "protomaps");
+    return this._basemaps.some((basemap) => basemap.provider === 'protomaps');
   }
 
   private _hasCartoBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "carto");
+    return this._basemaps.some((basemap) => basemap.provider === 'carto');
   }
 
   private _hasStadiaBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "stadia");
+    return this._basemaps.some((basemap) => basemap.provider === 'stadia');
   }
 
   private _hasTiandituBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "tianditu");
+    return this._basemaps.some((basemap) => basemap.provider === 'tianditu');
   }
 
   private _hasTomTomBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "tomtom");
+    return this._basemaps.some((basemap) => basemap.provider === 'tomtom');
   }
 
   private _hasHereBasemaps(): boolean {
-    return this._basemaps.some((basemap) => basemap.provider === "here");
+    return this._basemaps.some((basemap) => basemap.provider === 'here');
   }
 
   // True when a Google basemap can use a Map Tiles API key. Session-based Google
@@ -1938,12 +1859,10 @@ export class BasemapControl implements IControl {
   private _hasGoogleApiKeyBasemaps(): boolean {
     return this._basemaps.some(
       (basemap) =>
-        basemap.provider === "google" &&
-        basemap.source.type === "raster" &&
+        basemap.provider === 'google' &&
+        basemap.source.type === 'raster' &&
         (Boolean(basemap.source.googleSession) ||
-          basemap.source.tiles.some((tile) =>
-            tile.includes(API_KEY_PLACEHOLDER),
-          )),
+          basemap.source.tiles.some((tile) => tile.includes(API_KEY_PLACEHOLDER))),
     );
   }
 
@@ -1963,27 +1882,24 @@ export class BasemapControl implements IControl {
   }
 
   private _resolveStyleUrl(basemap: BasemapDefinition): string {
-    if (
-      basemap.source.type !== "style" &&
-      basemap.source.type !== "vector-style"
-    ) {
+    if (basemap.source.type !== 'style' && basemap.source.type !== 'vector-style') {
       throw new Error(`Basemap "${basemap.id}" is not a style basemap.`);
     }
 
     const url = basemap.source.url;
-    if (basemap.provider === "amazon") {
+    if (basemap.provider === 'amazon') {
       return this._resolveAmazonStyleUrl(url);
     }
 
-    if (basemap.provider === "maptiler") {
+    if (basemap.provider === 'maptiler') {
       return this._resolveMapTilerStyleUrl(url);
     }
 
-    if (basemap.provider === "mapbox") {
+    if (basemap.provider === 'mapbox') {
       return this._resolveMapboxStyleUrl(url);
     }
 
-    if (basemap.provider === "protomaps") {
+    if (basemap.provider === 'protomaps') {
       return this._resolveProtomapsStyleUrl(url);
     }
 
@@ -1996,18 +1912,16 @@ export class BasemapControl implements IControl {
     const apiKey = this._protomapsApiKey.trim();
     if (!apiKey) {
       throw new MissingCredentialError(
-        "Enter a Protomaps API key before applying this basemap.",
-        "protomaps",
+        'Enter a Protomaps API key before applying this basemap.',
+        'protomaps',
       );
     }
 
     return url.split(API_KEY_PLACEHOLDER).join(encodeURIComponent(apiKey));
   }
 
-  private _getStyleOptions(
-    basemap: BasemapDefinition,
-  ): SetStyleOptions | undefined {
-    if (basemap.provider === "mapbox") {
+  private _getStyleOptions(basemap: BasemapDefinition): SetStyleOptions | undefined {
+    if (basemap.provider === 'mapbox') {
       return {
         validate: false,
         transformStyle: (_previousStyle, nextStyle) =>
@@ -2017,24 +1931,12 @@ export class BasemapControl implements IControl {
     return undefined;
   }
 
-  private _transformMapboxStyle(
-    style: StyleSpecification,
-    accessToken: string,
-  ): StyleSpecification {
+  private _transformMapboxStyle(style: StyleSpecification, accessToken: string): StyleSpecification {
     const encodedAccessToken = encodeURIComponent(accessToken);
     const sources = Object.fromEntries(
       Object.entries(style.sources).map(([id, source]) => {
-        if ("url" in source && typeof source.url === "string") {
-          return [
-            id,
-            {
-              ...source,
-              url: this._resolveMapboxInternalUrl(
-                source.url,
-                encodedAccessToken,
-              ),
-            },
-          ];
+        if ('url' in source && typeof source.url === 'string') {
+          return [id, { ...source, url: this._resolveMapboxInternalUrl(source.url, encodedAccessToken) }];
         }
         return [id, source];
       }),
@@ -2043,20 +1945,20 @@ export class BasemapControl implements IControl {
     return {
       ...style,
       glyphs:
-        typeof style.glyphs === "string"
+        typeof style.glyphs === 'string'
           ? this._resolveMapboxInternalUrl(style.glyphs, encodedAccessToken)
           : style.glyphs,
       sprite: this._resolveMapboxSprite(style.sprite, encodedAccessToken),
-      projection: { type: "mercator" },
+      projection: { type: 'mercator' },
       sources,
     };
   }
 
   private _resolveMapboxSprite(
-    sprite: StyleSpecification["sprite"],
+    sprite: StyleSpecification['sprite'],
     encodedAccessToken: string,
-  ): StyleSpecification["sprite"] {
-    if (typeof sprite === "string") {
+  ): StyleSpecification['sprite'] {
+    if (typeof sprite === 'string') {
       return this._resolveMapboxInternalUrl(sprite, encodedAccessToken);
     }
 
@@ -2070,28 +1972,23 @@ export class BasemapControl implements IControl {
     return sprite;
   }
 
-  private _resolveMapboxInternalUrl(
-    url: string,
-    encodedAccessToken: string,
-  ): string {
-    if (url.startsWith("mapbox://sprites/")) {
-      const [, owner, styleId] =
-        /^mapbox:\/\/sprites\/([^/]+)\/(.+)$/.exec(url) ?? [];
+  private _resolveMapboxInternalUrl(url: string, encodedAccessToken: string): string {
+    if (url.startsWith('mapbox://sprites/')) {
+      const [, owner, styleId] = /^mapbox:\/\/sprites\/([^/]+)\/(.+)$/.exec(url) ?? [];
       if (owner && styleId) {
         return `https://api.mapbox.com/styles/v1/${owner}/${styleId}/sprite?access_token=${encodedAccessToken}`;
       }
     }
 
-    if (url.startsWith("mapbox://fonts/")) {
-      const [, owner, fontPath] =
-        /^mapbox:\/\/fonts\/([^/]+)\/(.+)$/.exec(url) ?? [];
+    if (url.startsWith('mapbox://fonts/')) {
+      const [, owner, fontPath] = /^mapbox:\/\/fonts\/([^/]+)\/(.+)$/.exec(url) ?? [];
       if (owner && fontPath) {
         return `https://api.mapbox.com/fonts/v1/${owner}/${fontPath}?access_token=${encodedAccessToken}`;
       }
     }
 
-    if (url.startsWith("mapbox://")) {
-      const tileset = url.replace(/^mapbox:\/\//, "");
+    if (url.startsWith('mapbox://')) {
+      const tileset = url.replace(/^mapbox:\/\//, '');
       return `https://api.mapbox.com/v4/${tileset}.json?secure&access_token=${encodedAccessToken}`;
     }
 
@@ -2110,8 +2007,8 @@ export class BasemapControl implements IControl {
     const apiKey = this._mapTilerApiKey.trim();
     if (!apiKey) {
       throw new MissingCredentialError(
-        "Enter a MapTiler API key before applying this basemap.",
-        "maptiler",
+        'Enter a MapTiler API key before applying this basemap.',
+        'maptiler',
       );
     }
 
@@ -2136,14 +2033,14 @@ export class BasemapControl implements IControl {
 
     if (url.includes(API_KEY_PLACEHOLDER) && !apiKey) {
       throw new MissingCredentialError(
-        "Enter an Amazon API key before applying this basemap.",
-        "amazon",
+        'Enter an Amazon API key before applying this basemap.',
+        'amazon',
       );
     }
     if (url.includes(AWS_REGION_PLACEHOLDER) && !awsRegion) {
       throw new MissingCredentialError(
-        "Enter an AWS region before applying this basemap.",
-        "amazon",
+        'Enter an AWS region before applying this basemap.',
+        'amazon',
       );
     }
 
@@ -2159,14 +2056,14 @@ export class BasemapControl implements IControl {
 
     if (url.includes(API_KEY_PLACEHOLDER) && !accessToken) {
       throw new MissingCredentialError(
-        "Enter a Mapbox access token before applying this basemap.",
-        "mapbox",
+        'Enter a Mapbox access token before applying this basemap.',
+        'mapbox',
       );
     }
     if (this._isUrlLikeCredential(accessToken)) {
       throw new MissingCredentialError(
-        "Enter a valid Mapbox access token, not a URL.",
-        "mapbox",
+        'Enter a valid Mapbox access token, not a URL.',
+        'mapbox',
       );
     }
 
@@ -2181,29 +2078,25 @@ export class BasemapControl implements IControl {
   // resolving any provider credentials first.
   private async _addOverlay(
     basemap: BasemapDefinition,
-    resolvedRasterTiles?: string[],
   ): Promise<ManagedRasterBasemap | undefined> {
-    if (basemap.source.type === "vector-overlay") {
+    if (basemap.source.type === 'vector-overlay') {
       return this._addVectorOverlay(basemap, basemap.source);
     }
-    return this._addRasterBasemap(basemap, resolvedRasterTiles);
+    return this._addRasterBasemap(basemap);
   }
 
   private async _addRasterBasemap(
     basemap: BasemapDefinition,
-    resolvedTiles?: string[],
   ): Promise<ManagedRasterBasemap | undefined> {
-    if (!this._map || basemap.source.type !== "raster") return undefined;
+    if (!this._map || basemap.source.type !== 'raster') return undefined;
 
-    const tiles = resolvedTiles ?? (await this._resolveRasterTiles(basemap));
+    const tiles = await this._resolveRasterTiles(basemap);
 
     const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
-    const layerId = [CONTROL_LAYER_PREFIX, basemap.id]
-      .filter(Boolean)
-      .join("-");
+    const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
     const beforeId = this._getBasemapInsertBeforeId();
     const source: SourceSpecification = {
-      type: "raster",
+      type: 'raster',
       tiles,
       tileSize: basemap.source.tileSize ?? 256,
       minzoom: basemap.source.minzoom,
@@ -2213,7 +2106,7 @@ export class BasemapControl implements IControl {
     };
     const layer: LayerSpecification = {
       id: layerId,
-      type: "raster",
+      type: 'raster',
       source: sourceId,
     };
 
@@ -2232,13 +2125,11 @@ export class BasemapControl implements IControl {
     if (!this._map) return undefined;
 
     const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
-    const layerId = [CONTROL_LAYER_PREFIX, basemap.id]
-      .filter(Boolean)
-      .join("-");
+    const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
     const beforeId = this._getBasemapInsertBeforeId();
 
     const source = {
-      type: "vector",
+      type: 'vector',
       ...this._resolveVectorOverlaySource(basemap, overlay),
       minzoom: overlay.minzoom,
       maxzoom: overlay.maxzoom,
@@ -2247,9 +2138,9 @@ export class BasemapControl implements IControl {
 
     const layer = {
       id: layerId,
-      type: overlay.layerType ?? "line",
+      type: overlay.layerType ?? 'line',
       source: sourceId,
-      "source-layer": overlay.sourceLayer,
+      'source-layer': overlay.sourceLayer,
       ...(overlay.layout ? { layout: overlay.layout } : {}),
       ...(overlay.paint ? { paint: overlay.paint } : {}),
     } as LayerSpecification;
@@ -2269,18 +2160,18 @@ export class BasemapControl implements IControl {
     basemap: BasemapDefinition,
     overlay: VectorOverlayBasemapSource,
   ): { url: string } | { tiles: string[] } {
-    if (basemap.provider === "mapbox") {
+    if (basemap.provider === 'mapbox') {
       const accessToken = this._mapboxAccessToken.trim();
       if (!accessToken) {
         throw new MissingCredentialError(
-          "Enter a Mapbox access token before applying this overlay.",
-          "mapbox",
+          'Enter a Mapbox access token before applying this overlay.',
+          'mapbox',
         );
       }
       if (this._isUrlLikeCredential(accessToken)) {
         throw new MissingCredentialError(
-          "Enter a valid Mapbox access token, not a URL.",
-          "mapbox",
+          'Enter a valid Mapbox access token, not a URL.',
+          'mapbox',
         );
       }
       const encoded = encodeURIComponent(accessToken);
@@ -2298,10 +2189,8 @@ export class BasemapControl implements IControl {
   // credentials (and, for Google, a Map Tiles API session token). Throws a
   // MissingCredentialError when a required key is absent so the panel can
   // surface a "Get a ..." link and reveal the credential inputs.
-  private async _resolveRasterTiles(
-    basemap: BasemapDefinition,
-  ): Promise<string[]> {
-    if (basemap.source.type !== "raster") return [];
+  private async _resolveRasterTiles(basemap: BasemapDefinition): Promise<string[]> {
+    if (basemap.source.type !== 'raster') return [];
     const { tiles, googleSession, sessionTiles } = basemap.source;
 
     if (googleSession) {
@@ -2332,13 +2221,13 @@ export class BasemapControl implements IControl {
   }
 
   private _rasterApiKeyFor(provider: string): string {
-    if (provider === "carto") return this._cartoApiKey.trim();
-    if (provider === "tomtom") return this._tomtomApiKey.trim();
-    if (provider === "here") return this._hereApiKey.trim();
-    if (provider === "stadia") return this._stadiaApiKey.trim();
-    if (provider === "tianditu") return this._tiandituApiKey.trim();
-    if (provider === "google") return this._googleMapsApiKey.trim();
-    return "";
+    if (provider === 'carto') return this._cartoApiKey.trim();
+    if (provider === 'tomtom') return this._tomtomApiKey.trim();
+    if (provider === 'here') return this._hereApiKey.trim();
+    if (provider === 'stadia') return this._stadiaApiKey.trim();
+    if (provider === 'tianditu') return this._tiandituApiKey.trim();
+    if (provider === 'google') return this._googleMapsApiKey.trim();
+    return '';
   }
 
   // True when a basemap is (or would be) served from its public keyless `tiles`
@@ -2347,7 +2236,7 @@ export class BasemapControl implements IControl {
   // provider tiles (`sessionTiles`) once one is entered.
   private _basemapUsesKeylessFallback(basemap: BasemapDefinition): boolean {
     return (
-      basemap.source.type === "raster" &&
+      basemap.source.type === 'raster' &&
       Boolean(basemap.source.googleSession) &&
       (basemap.source.sessionTiles?.length ?? 0) > 0 &&
       !this._rasterApiKeyFor(basemap.provider)
@@ -2361,8 +2250,7 @@ export class BasemapControl implements IControl {
   private _reapplyBasemap(id: string): void {
     const basemap = this._basemaps.find((candidate) => candidate.id === id);
     const isOverlay =
-      basemap?.source.type === "raster" ||
-      basemap?.source.type === "vector-overlay";
+      basemap?.source.type === 'raster' || basemap?.source.type === 'vector-overlay';
     if (this._state.allowMultiple && isOverlay) {
       this.addBasemap(id).catch(() => {});
     } else {
@@ -2371,14 +2259,11 @@ export class BasemapControl implements IControl {
   }
 
   private _missingRasterKeyError(provider: string): MissingCredentialError {
-    const label = RASTER_KEY_LABELS[provider] ?? "API key";
+    const label = RASTER_KEY_LABELS[provider] ?? 'API key';
     const helpProvider = (
-      provider in PROVIDER_CREDENTIAL_HELP ? provider : "maptiler"
+      provider in PROVIDER_CREDENTIAL_HELP ? provider : 'maptiler'
     ) as keyof typeof PROVIDER_CREDENTIAL_HELP;
-    return new MissingCredentialError(
-      `Enter a ${label} before applying this layer.`,
-      helpProvider,
-    );
+    return new MissingCredentialError(`Enter a ${label} before applying this layer.`, helpProvider);
   }
 
   // Resolves Google tile templates by minting (or reusing) a Map Tiles API
@@ -2390,8 +2275,8 @@ export class BasemapControl implements IControl {
     const apiKey = this._googleMapsApiKey.trim();
     if (!apiKey) {
       throw new MissingCredentialError(
-        "Enter a Google Maps API key before applying this layer.",
-        "google",
+        'Enter a Google Maps API key before applying this layer.',
+        'google',
       );
     }
 
@@ -2399,11 +2284,7 @@ export class BasemapControl implements IControl {
     const encodedKey = encodeURIComponent(apiKey);
     const encodedSession = encodeURIComponent(token);
     return tiles.map((tile) =>
-      tile
-        .split("{session}")
-        .join(encodedSession)
-        .split(API_KEY_PLACEHOLDER)
-        .join(encodedKey),
+      tile.split('{session}').join(encodedSession).split(API_KEY_PLACEHOLDER).join(encodedKey),
     );
   }
 
@@ -2422,12 +2303,12 @@ export class BasemapControl implements IControl {
     const response = await fetch(
       `https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(apiKey)}`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mapType: config.mapType,
-          language: config.language ?? "en-US",
-          region: config.region ?? "US",
+          language: config.language ?? 'en-US',
+          region: config.region ?? 'US',
           layerTypes: config.layerTypes,
           overlay: config.overlay,
         }),
@@ -2435,23 +2316,20 @@ export class BasemapControl implements IControl {
     );
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
+      const detail = await response.text().catch(() => '');
       throw new MissingCredentialError(
         `Google could not create a tile session (HTTP ${response.status}). ${this._summarizeGoogleError(
           detail,
         )}`.trim(),
-        "google",
+        'google',
       );
     }
 
-    const data = (await response.json()) as {
-      session?: string;
-      expiry?: string;
-    };
+    const data = (await response.json()) as { session?: string; expiry?: string };
     if (!data.session) {
       throw new MissingCredentialError(
-        "Google did not return a tile session token. Check that the Map Tiles API is enabled for your key.",
-        "google",
+        'Google did not return a tile session token. Check that the Map Tiles API is enabled for your key.',
+        'google',
       );
     }
 
@@ -2466,10 +2344,10 @@ export class BasemapControl implements IControl {
   }
 
   private _summarizeGoogleError(detail: string): string {
-    if (!detail) return "";
+    if (!detail) return '';
     try {
       const parsed = JSON.parse(detail) as { error?: { message?: string } };
-      return parsed.error?.message ?? "";
+      return parsed.error?.message ?? '';
     } catch {
       return detail.slice(0, 200);
     }
@@ -2477,10 +2355,7 @@ export class BasemapControl implements IControl {
 
   private _waitForStyleReady(): Promise<void> {
     if (!this._map) return Promise.resolve();
-    if (
-      typeof this._map.isStyleLoaded !== "function" ||
-      this._map.isStyleLoaded()
-    ) {
+    if (typeof this._map.isStyleLoaded !== 'function' || this._map.isStyleLoaded()) {
       return Promise.resolve();
     }
 
@@ -2491,16 +2366,16 @@ export class BasemapControl implements IControl {
         if (settled) return;
         settled = true;
         if (timer !== undefined) clearTimeout(timer);
-        this._map?.off("load", done);
-        this._map?.off("style.load", done);
+        this._map?.off('load', done);
+        this._map?.off('style.load', done);
         resolve();
       };
       // Fall back after a short wait so a missed `load`/`style.load` event
       // (e.g. when basemaps are switched faster than styles settle) can never
       // leave the control stuck in its loading state with a wait cursor.
       timer = setTimeout(done, 1500);
-      this._map?.once("load", done);
-      this._map?.once("style.load", done);
+      this._map?.once('load', done);
+      this._map?.once('style.load', done);
     });
   }
 
@@ -2541,7 +2416,7 @@ export class BasemapControl implements IControl {
 
   private _getBasemapInsertBeforeId(): string | undefined {
     const beforeId = this._state.beforeId.trim();
-    if (!beforeId || beforeId.toLowerCase() === "none") return undefined;
+    if (!beforeId || beforeId.toLowerCase() === 'none') return undefined;
     return beforeId;
   }
 
@@ -2549,26 +2424,22 @@ export class BasemapControl implements IControl {
     this._resizeHandler = () => {
       if (!this._state.collapsed) this._updatePanelPosition();
     };
-    window.addEventListener("resize", this._resizeHandler);
+    window.addEventListener('resize', this._resizeHandler);
 
     this._mapResizeHandler = () => {
       if (!this._state.collapsed) this._updatePanelPosition();
     };
-    this._map?.on("resize", this._mapResizeHandler);
+    this._map?.on('resize', this._mapResizeHandler);
   }
 
   private _getControlPosition(): BasemapControlPosition {
     const parent = this._container?.parentElement;
     if (!parent) return this._options.position;
 
-    if (parent.classList.contains("maplibregl-ctrl-top-left"))
-      return "top-left";
-    if (parent.classList.contains("maplibregl-ctrl-top-right"))
-      return "top-right";
-    if (parent.classList.contains("maplibregl-ctrl-bottom-left"))
-      return "bottom-left";
-    if (parent.classList.contains("maplibregl-ctrl-bottom-right"))
-      return "bottom-right";
+    if (parent.classList.contains('maplibregl-ctrl-top-left')) return 'top-left';
+    if (parent.classList.contains('maplibregl-ctrl-top-right')) return 'top-right';
+    if (parent.classList.contains('maplibregl-ctrl-bottom-left')) return 'bottom-left';
+    if (parent.classList.contains('maplibregl-ctrl-bottom-right')) return 'bottom-right';
 
     return this._options.position;
   }
@@ -2576,7 +2447,7 @@ export class BasemapControl implements IControl {
   private _updatePanelPosition(): void {
     if (!this._container || !this._panel || !this._mapContainer) return;
 
-    const button = this._container.querySelector(".basemap-control-toggle");
+    const button = this._container.querySelector('.basemap-control-toggle');
     if (!button) return;
 
     const buttonRect = button.getBoundingClientRect();
@@ -2588,25 +2459,25 @@ export class BasemapControl implements IControl {
     const buttonRight = mapRect.right - buttonRect.right;
     const panelGap = 5;
 
-    this._panel.style.top = "";
-    this._panel.style.bottom = "";
-    this._panel.style.left = "";
-    this._panel.style.right = "";
+    this._panel.style.top = '';
+    this._panel.style.bottom = '';
+    this._panel.style.left = '';
+    this._panel.style.right = '';
 
     switch (position) {
-      case "top-left":
+      case 'top-left':
         this._panel.style.top = `${buttonTop + buttonRect.height + panelGap}px`;
         this._panel.style.left = `${buttonLeft}px`;
         break;
-      case "top-right":
+      case 'top-right':
         this._panel.style.top = `${buttonTop + buttonRect.height + panelGap}px`;
         this._panel.style.right = `${buttonRight}px`;
         break;
-      case "bottom-left":
+      case 'bottom-left':
         this._panel.style.bottom = `${buttonBottom + buttonRect.height + panelGap}px`;
         this._panel.style.left = `${buttonLeft}px`;
         break;
-      case "bottom-right":
+      case 'bottom-right':
         this._panel.style.bottom = `${buttonBottom + buttonRect.height + panelGap}px`;
         this._panel.style.right = `${buttonRight}px`;
         break;
@@ -2622,8 +2493,8 @@ export class BasemapControl implements IControl {
     event.stopPropagation();
 
     const position = this._getControlPosition();
-    const isLeft = position === "top-left" || position === "bottom-left";
-    const isTop = position === "top-left" || position === "top-right";
+    const isLeft = position === 'top-left' || position === 'bottom-left';
+    const isTop = position === 'top-left' || position === 'top-right';
     const rect = this._panel.getBoundingClientRect();
     this._resizeAnchor = {
       x: isLeft ? rect.left : rect.right,
@@ -2637,9 +2508,9 @@ export class BasemapControl implements IControl {
     const handle = event.currentTarget as HTMLElement;
     this._resizeHandleEl = handle;
     handle.setPointerCapture?.(event.pointerId);
-    window.addEventListener("pointermove", this._onResizeMove);
-    window.addEventListener("pointerup", this._onResizeEnd);
-    window.addEventListener("pointercancel", this._onResizeEnd);
+    window.addEventListener('pointermove', this._onResizeMove);
+    window.addEventListener('pointerup', this._onResizeEnd);
+    window.addEventListener('pointercancel', this._onResizeEnd);
   }
 
   private _onResizeMove = (event: PointerEvent): void => {
@@ -2649,36 +2520,30 @@ export class BasemapControl implements IControl {
     const rawWidth = isLeft ? event.clientX - x : x - event.clientX;
     const rawHeight = isTop ? event.clientY - y : y - event.clientY;
     const width = this._clampSize(rawWidth, MIN_PANEL_WIDTH, bounds.maxWidth);
-    const height = this._clampSize(
-      rawHeight,
-      MIN_PANEL_HEIGHT,
-      bounds.maxHeight,
-    );
+    const height = this._clampSize(rawHeight, MIN_PANEL_HEIGHT, bounds.maxHeight);
 
     this._panel.style.width = `${width}px`;
     this._panel.style.height = `${height}px`;
-    this._panel.classList.add("is-resized");
+    this._panel.classList.add('is-resized');
     this._state = { ...this._state, panelWidth: width, panelHeight: height };
     this._updatePanelPosition();
   };
 
   private _onResizeEnd = (event: PointerEvent): void => {
-    window.removeEventListener("pointermove", this._onResizeMove);
-    window.removeEventListener("pointerup", this._onResizeEnd);
-    window.removeEventListener("pointercancel", this._onResizeEnd);
+    window.removeEventListener('pointermove', this._onResizeMove);
+    window.removeEventListener('pointerup', this._onResizeEnd);
+    window.removeEventListener('pointercancel', this._onResizeEnd);
     this._resizeHandleEl?.releasePointerCapture?.(event.pointerId);
     this._resizeHandleEl = null;
     if (!this._resizeAnchor) return;
     this._resizeAnchor = null;
-    this._emit({ type: "statechange", state: this.getState() });
+    this._emit({ type: 'statechange', state: this.getState() });
   };
 
   private _getResizeBounds(): { maxWidth: number; maxHeight: number } {
     const mapRect = this._mapContainer?.getBoundingClientRect();
-    const availableWidth =
-      (mapRect?.width ?? window.innerWidth) - PANEL_VIEWPORT_MARGIN * 2;
-    const availableHeight =
-      (mapRect?.height ?? window.innerHeight) - PANEL_VIEWPORT_MARGIN * 2;
+    const availableWidth = (mapRect?.width ?? window.innerWidth) - PANEL_VIEWPORT_MARGIN * 2;
+    const availableHeight = (mapRect?.height ?? window.innerHeight) - PANEL_VIEWPORT_MARGIN * 2;
     return {
       maxWidth: Math.max(MIN_PANEL_WIDTH, availableWidth),
       maxHeight: Math.max(MIN_PANEL_HEIGHT, availableHeight),
