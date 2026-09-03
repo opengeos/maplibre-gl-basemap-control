@@ -61,6 +61,10 @@ const AWS_REGION_PLACEHOLDER = '{aws-region}';
 // "Get a ..." link beside a missing-credential error so the message points at a
 // concrete next step instead of dead-ending.
 const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> = {
+  carto: {
+    url: 'https://carto.com/basemaps/apikey/',
+    label: 'Get a CARTO API key',
+  },
   amazon: {
     url: 'https://docs.aws.amazon.com/location/latest/developerguide/using-apikeys.html',
     label: 'Get an Amazon API key',
@@ -103,6 +107,7 @@ const PROVIDER_CREDENTIAL_HELP: Record<string, { url: string; label: string }> =
 // this layer." message raised when a raster basemap's `{api-key}` cannot be
 // substituted. Providers absent here fall back to a generic "API key".
 const RASTER_KEY_LABELS: Record<string, string> = {
+  carto: 'CARTO API key',
   google: 'Google Maps API key',
   here: 'HERE API key',
   stadia: 'Stadia Maps API key',
@@ -232,6 +237,7 @@ export class BasemapControl implements IControl {
   // stacked raster overlay so each can be added or removed independently.
   private _managedRasters: globalThis.Map<string, ManagedRasterBasemap> = new globalThis.Map();
   private _mapTilerApiKey = '';
+  private _cartoApiKey = '';
   private _amazonApiKey = '';
   private _awsRegion = '';
   private _mapboxAccessToken = '';
@@ -275,6 +281,7 @@ export class BasemapControl implements IControl {
   constructor(options?: BasemapControlOptions) {
     this._options = { ...DEFAULT_OPTIONS, ...options };
     this._mapTilerApiKey = options?.mapTilerApiKey ?? '';
+    this._cartoApiKey = options?.cartoApiKey ?? '';
     this._amazonApiKey = options?.amazonApiKey ?? '';
     this._awsRegion = options?.awsRegion ?? 'us-east-1';
     this._mapboxAccessToken = options?.mapboxAccessToken ?? '';
@@ -414,6 +421,13 @@ export class BasemapControl implements IControl {
 
   setMapTilerApiKey(apiKey: string): void {
     this._mapTilerApiKey = apiKey;
+    this._clearError();
+    this._renderContent();
+    this._emit({ type: 'statechange', state: this.getState() });
+  }
+
+  setCartoApiKey(apiKey: string): void {
+    this._cartoApiKey = apiKey;
     this._clearError();
     this._renderContent();
     this._emit({ type: 'statechange', state: this.getState() });
@@ -1211,6 +1225,23 @@ export class BasemapControl implements IControl {
   }> {
     return [
       {
+        provider: 'carto',
+        label: 'CARTO',
+        has: this._hasCartoBasemaps(),
+        fields: [
+          {
+            className: 'basemap-control-carto-key',
+            type: 'password',
+            placeholder: 'CARTO API key',
+            ariaLabel: 'CARTO API key',
+            value: this._cartoApiKey,
+            onInput: (value) => {
+              this._cartoApiKey = value;
+            },
+          },
+        ],
+      },
+      {
         provider: 'maptiler',
         label: 'MapTiler',
         has: this._hasMapTilerBasemaps(),
@@ -1801,6 +1832,10 @@ export class BasemapControl implements IControl {
     return this._basemaps.some((basemap) => basemap.provider === 'protomaps');
   }
 
+  private _hasCartoBasemaps(): boolean {
+    return this._basemaps.some((basemap) => basemap.provider === 'carto');
+  }
+
   private _hasStadiaBasemaps(): boolean {
     return this._basemaps.some((basemap) => basemap.provider === 'stadia');
   }
@@ -1834,6 +1869,7 @@ export class BasemapControl implements IControl {
   private _hasProviderSettings(): boolean {
     return (
       this._hasMapTilerBasemaps() ||
+      this._hasCartoBasemaps() ||
       this._hasAmazonBasemaps() ||
       this._hasMapboxBasemaps() ||
       this._hasProtomapsBasemaps() ||
@@ -2185,6 +2221,7 @@ export class BasemapControl implements IControl {
   }
 
   private _rasterApiKeyFor(provider: string): string {
+    if (provider === 'carto') return this._cartoApiKey.trim();
     if (provider === 'tomtom') return this._tomtomApiKey.trim();
     if (provider === 'here') return this._hereApiKey.trim();
     if (provider === 'stadia') return this._stadiaApiKey.trim();

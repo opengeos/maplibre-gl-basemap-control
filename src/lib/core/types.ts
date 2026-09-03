@@ -111,6 +111,8 @@ export interface BasemapControlOptions {
   panelWidth?: number;
   className?: string;
   mapTilerApiKey?: string;
+  /** CARTO basemap API key, appended as the `key` query parameter. */
+  cartoApiKey?: string;
   amazonApiKey?: string;
   awsRegion?: string;
   mapboxAccessToken?: string;

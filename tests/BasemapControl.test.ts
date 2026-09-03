@@ -698,6 +698,51 @@ describe('BasemapControl', () => {
     );
   });
 
+  it('requires an API key before applying CARTO basemaps', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ collapsed: false });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    await expect(control.setBasemap('carto-positron')).rejects.toThrow(
+      'Enter a CARTO API key before applying this layer.',
+    );
+  });
+
+  it('substitutes the CARTO API key into every host template', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({ cartoApiKey: 'carto secret' });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('carto-positron');
+
+    const tiles = lastSourceFor(map, 'carto-positron')?.tiles ?? [];
+    expect(tiles).toHaveLength(4);
+    expect(tiles[0]).toBe(
+      'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=carto%20secret',
+    );
+    expect(tiles[3]).toBe(
+      'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=carto%20secret',
+    );
+  });
+
+  it('applies a CARTO key set after the failed attempt', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({});
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await expect(control.setBasemap('carto-voyager')).rejects.toThrow(
+      'Enter a CARTO API key before applying this layer.',
+    );
+
+    control.setCartoApiKey('later-key');
+    await control.setBasemap('carto-voyager');
+
+    expect(lastSourceFor(map, 'carto-voyager')?.tiles?.[0]).toBe(
+      'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=later-key',
+    );
+  });
+
   it('substitutes the Stadia API key into the tile URL', async () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({ stadiaApiKey: 'st secret' });
