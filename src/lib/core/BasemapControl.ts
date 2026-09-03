@@ -624,6 +624,15 @@ export class BasemapControl implements IControl {
       let resolvedStyleUrl: string | undefined;
       if (isOverlay) {
         await this._waitForStyleReady();
+        // Resolve credentials before removing the current raster. A missing or
+        // invalid key must leave the existing basemap intact.
+        const resolvedRasterTiles =
+          basemap.source.type === 'raster'
+            ? await this._resolveRasterTiles(basemap)
+            : undefined;
+        if (basemap.source.type === 'vector-overlay') {
+          this._resolveVectorOverlaySource(basemap, basemap.source);
+        }
         if (effectiveMode === 'replace') {
           this._removeManagedBasemap();
         } else {
@@ -631,7 +640,7 @@ export class BasemapControl implements IControl {
           // current before_id, so drop the previous instance first.
           this._removeManagedRaster(basemap.id);
         }
-        managedRaster = await this._addOverlay(basemap);
+        managedRaster = await this._addOverlay(basemap, resolvedRasterTiles);
       } else {
         const styleUrl = this._resolveStyleUrl(basemap);
         resolvedStyleUrl = styleUrl;
@@ -2078,19 +2087,21 @@ export class BasemapControl implements IControl {
   // resolving any provider credentials first.
   private async _addOverlay(
     basemap: BasemapDefinition,
+    resolvedRasterTiles?: string[],
   ): Promise<ManagedRasterBasemap | undefined> {
     if (basemap.source.type === 'vector-overlay') {
       return this._addVectorOverlay(basemap, basemap.source);
     }
-    return this._addRasterBasemap(basemap);
+    return this._addRasterBasemap(basemap, resolvedRasterTiles);
   }
 
   private async _addRasterBasemap(
     basemap: BasemapDefinition,
+    resolvedTiles?: string[],
   ): Promise<ManagedRasterBasemap | undefined> {
     if (!this._map || basemap.source.type !== 'raster') return undefined;
 
-    const tiles = await this._resolveRasterTiles(basemap);
+    const tiles = resolvedTiles ?? (await this._resolveRasterTiles(basemap));
 
     const sourceId = `${CONTROL_SOURCE_PREFIX}-${basemap.id}`;
     const layerId = [CONTROL_LAYER_PREFIX, basemap.id].filter(Boolean).join('-');
