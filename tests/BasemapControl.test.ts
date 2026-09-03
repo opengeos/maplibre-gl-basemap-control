@@ -717,13 +717,30 @@ describe('BasemapControl', () => {
     await control.setBasemap('carto-positron');
 
     const tiles = lastSourceFor(map, 'carto-positron')?.tiles ?? [];
-    expect(tiles).toHaveLength(4);
-    expect(tiles[0]).toBe(
+    expect(tiles).toEqual([
       'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=carto%20secret',
-    );
-    expect(tiles[3]).toBe(
+      'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=carto%20secret',
+      'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=carto%20secret',
       'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=carto%20secret',
+    ]);
+  });
+
+  it('preserves the active raster when the CARTO API key is missing', async () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({});
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    await control.setBasemap('osm-standard');
+    vi.mocked(map.removeLayer).mockClear();
+    vi.mocked(map.removeSource).mockClear();
+
+    await expect(control.setBasemap('carto-positron')).rejects.toThrow(
+      'Enter a CARTO API key before applying this layer.',
     );
+
+    expect(map.removeLayer).not.toHaveBeenCalled();
+    expect(map.removeSource).not.toHaveBeenCalled();
+    expect(control.getActiveBasemap()?.id).toBe('osm-standard');
   });
 
   it('applies a CARTO key set after the failed attempt', async () => {
