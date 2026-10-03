@@ -164,6 +164,24 @@ describe('BasemapControl', () => {
     );
   });
 
+  it('labels the "all" option of each filter select', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: false,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+
+    expect(screen.getByLabelText<HTMLSelectElement>('Provider').options[0].text).toBe(
+      'All providers',
+    );
+    expect(screen.getByLabelText<HTMLSelectElement>('Category').options[0].text).toBe(
+      'All categories',
+    );
+  });
+
   it('filters results from the provider select', () => {
     const { map, controlCorner } = createMockMap();
     const control = new BasemapControl({

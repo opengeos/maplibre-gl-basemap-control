@@ -1628,6 +1628,7 @@ export class BasemapControl implements IControl {
     row.appendChild(
       this._createSelect(
         'Provider',
+        'All providers',
         this._state.providerFilter,
         providers.map((provider) => ({ value: provider.id, label: provider.name })),
         (value) => {
@@ -1642,6 +1643,7 @@ export class BasemapControl implements IControl {
     row.appendChild(
       this._createSelect(
         'Category',
+        'All categories',
         this._state.categoryFilter,
         categories.map((category) => ({ value: category, label: category })),
         (value) => {
@@ -1657,6 +1659,7 @@ export class BasemapControl implements IControl {
 
   private _createSelect(
     label: string,
+    allLabel: string,
     value: string,
     options: Array<{ value: string; label: string }>,
     onChange: (value: string) => void,
@@ -1667,7 +1670,7 @@ export class BasemapControl implements IControl {
 
     const all = document.createElement('option');
     all.value = '';
-    all.textContent = `All ${label.toLowerCase()}s`;
+    all.textContent = allLabel;
     select.appendChild(all);
 
     options.forEach((option) => {
