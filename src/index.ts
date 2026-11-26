@@ -2,6 +2,13 @@ import './lib/styles/basemap-control.css';
 
 export { BasemapControl } from './lib/core/BasemapControl';
 export {
+  BASEMAP_PANEL_CLASS,
+  BASEMAP_PANEL_SELECTOR,
+  BASEMAP_ROW_CLASS,
+  BASEMAP_ROW_ID_ATTRIBUTE,
+  BASEMAP_ROW_SELECTOR,
+} from './lib/core/dom';
+export {
   DEFAULT_BASEMAPS,
   DEFAULT_BASEMAP_PROVIDERS,
   combineProviders,

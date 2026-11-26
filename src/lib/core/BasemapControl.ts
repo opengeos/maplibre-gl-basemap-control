@@ -23,6 +23,7 @@ import type {
   ManagedRasterBasemap,
   VectorOverlayBasemapSource,
 } from './types';
+import { BASEMAP_PANEL_CLASS, BASEMAP_ROW_CLASS, BASEMAP_ROW_ID_ATTRIBUTE } from './dom';
 
 const DEFAULT_OPTIONS: Required<
   Pick<
@@ -1006,7 +1007,7 @@ export class BasemapControl implements IControl {
 
   private _createPanel(): HTMLElement {
     const panel = document.createElement('div');
-    panel.className = 'basemap-control-panel';
+    panel.className = BASEMAP_PANEL_CLASS;
     panel.style.width = `${this._state.panelWidth}px`;
     if (this._state.panelHeight !== undefined) {
       panel.style.height = `${this._state.panelHeight}px`;
@@ -1767,8 +1768,8 @@ export class BasemapControl implements IControl {
     results.forEach((basemap) => {
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = 'basemap-control-result';
-      row.dataset.basemapId = basemap.id;
+      row.className = BASEMAP_ROW_CLASS;
+      row.setAttribute(BASEMAP_ROW_ID_ATTRIBUTE, basemap.id);
       if (this._state.activeBasemapIds.includes(basemap.id)) {
         row.classList.add('is-active');
         row.setAttribute('aria-current', 'true');

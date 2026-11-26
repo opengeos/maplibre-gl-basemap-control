@@ -457,6 +457,24 @@ before that layer.
 - `expand`
 - `statechange`
 
+### DOM hooks
+
+To decorate the panel (for example, adding a thumbnail to each catalog row), use the exported names instead of hard-coding class names. They are public API and come from a dependency-free module:
+
+| Export | Value |
+| --- | --- |
+| `BASEMAP_PANEL_CLASS` / `BASEMAP_PANEL_SELECTOR` | `basemap-control-panel` / `.basemap-control-panel` |
+| `BASEMAP_ROW_CLASS` / `BASEMAP_ROW_SELECTOR` | `basemap-control-result` / `.basemap-control-result` |
+| `BASEMAP_ROW_ID_ATTRIBUTE` | `data-basemap-id` (holds the row's `BasemapDefinition.id`) |
+
+```typescript
+import { BASEMAP_ROW_ID_ATTRIBUTE, BASEMAP_ROW_SELECTOR } from 'maplibre-gl-basemap-control';
+
+panel.querySelectorAll<HTMLElement>(BASEMAP_ROW_SELECTOR).forEach((row) => {
+  const id = row.getAttribute(BASEMAP_ROW_ID_ATTRIBUTE);
+});
+```
+
 ## Attribution
 
 Built-in basemaps include attribution strings in their MapLibre source definitions. Consumers are responsible for confirming that selected providers and usage volumes match their project requirements.

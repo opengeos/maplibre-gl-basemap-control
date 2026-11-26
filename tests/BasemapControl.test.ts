@@ -1,6 +1,11 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BasemapControl } from '../src/lib/core/BasemapControl';
+import {
+  BASEMAP_PANEL_SELECTOR,
+  BASEMAP_ROW_ID_ATTRIBUTE,
+  BASEMAP_ROW_SELECTOR,
+} from '../src/index';
 import type { BasemapDefinition } from '../src/lib/core/types';
 
 // Drains pending microtasks so a panel click's async basemap application
@@ -103,6 +108,24 @@ function createMockMap() {
 describe('BasemapControl', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+
+  it('renders the DOM the exported selectors name', () => {
+    const { map, controlCorner } = createMockMap();
+    const control = new BasemapControl({
+      basemaps,
+      includeDefaultBasemaps: false,
+      collapsed: true,
+    });
+
+    controlCorner.appendChild(control.onAdd(map as never));
+    const panel = document.querySelector<HTMLElement>(BASEMAP_PANEL_SELECTOR);
+    expect(panel).toBeTruthy();
+    const rowIds = Array.from(panel!.querySelectorAll(BASEMAP_ROW_SELECTOR)).map((row) =>
+      row.getAttribute(BASEMAP_ROW_ID_ATTRIBUTE),
+    );
+    expect(rowIds.length).toBeGreaterThan(0);
+    expect(rowIds).toEqual(expect.arrayContaining(basemaps.map((basemap) => basemap.id)));
   });
 
   it('creates the collapsed button and renders basemap results', () => {
